@@ -3,7 +3,7 @@ import {
     html,
     css,
     repeat,
-} from "https://cdn.jsdelivr.net/gh/lit/dist@2/all/lit-all.min.js";
+} from "/local/community/activity-manager-card/lit-all.min.js";
 
 export const utils = {
     _formatTimeAgo: (date) => {
