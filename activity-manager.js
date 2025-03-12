@@ -404,13 +404,10 @@ class ActivityManagerCard extends LitElement {
                 return true;
             })
             .sort((a, b) => {
-                if (a["category"] == b["category"])
-                    return a["name"]
-                        .toLowerCase()
-                        .localeCompare(b["name"].toLowerCase());
-                return a["category"]
-                    .toLowerCase()
-                    .localeCompare(b["category"].toLowerCase());
+                // Sort by due date (soonest first)
+                if (a.difference < 0 && b.difference >= 0) return -1;
+                if (a.difference >= 0 && b.difference < 0) return 1;
+                return a.difference - b.difference;																																																							  
             });
 
         this.requestUpdate();
