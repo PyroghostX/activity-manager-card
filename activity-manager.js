@@ -128,13 +128,13 @@ class ActivityManagerCard extends LitElement {
                                     </div>
                                     <span class="am-item-name">
                                         <div class="am-item-primary">
-                                            ${activity.name}
-                                        </div>
-                                        <div class="am-item-secondary">
-                                            ${utils._formatTimeAgo(
-                                                activity.due
-                                            )}
-                                        </div>
+											${activity.names && activity.names.length > 0 ? 
+											  activity.names[activity.current_name_index || 0] : 
+											  activity.name}
+										</div>
+									<div class="am-item-secondary">
+										${utils._formatTimeAgo(activity.due)} - Last done: ${new Date(activity.last_completed).toLocaleDateString()}
+									</div>
                                     </span>
                                     ${this._renderActionButton(activity)}
                                 </div>
@@ -193,7 +193,7 @@ class ActivityManagerCard extends LitElement {
                             value="${this._config["category"]}" />
 
                         <div class="form-item">
-                            <ha-textfield type="text" id="name" placeholder="Name" style="grid-column: 1 / span 2">
+                            <ha-textfield type="text" id="name" placeholder="Names (separate with commas)" style="grid-column: 1 / span 2">
                             </ha-textfield>
                         </div>
                         
@@ -272,6 +272,58 @@ class ActivityManagerCard extends LitElement {
         `;
     }
 
+	_addNameToActivity() {
+		if (this._currentItem == null) return;
+		
+		const newNameInput = this.shadowRoot.querySelector("#add-new-name");
+		if (!newNameInput.value.trim()) return;
+		
+		// Update the item locally
+		if (!this._currentItem.names) {
+			this._currentItem.names = [this._currentItem.name];
+			this._currentItem.current_name_index = 0;
+		}
+		
+		// Add the name locally for immediate UI update
+		this._currentItem.names.push(newNameInput.value.trim());
+		
+		// Call the service to add the name
+		this._hass.callService("activity_manager", "add_name", {
+			entity_id: `sensor.${this._currentItem.category.toLowerCase()}_${this._currentItem.names[this._currentItem.current_name_index].toLowerCase().replace(/\s+/g, '_')}`,
+			name: newNameInput.value.trim()
+		});
+		
+		newNameInput.value = '';
+		
+		// Force UI update
+		this.requestUpdate();
+		
+		// Optionally, add feedback to the user
+		this._showToast("Name added successfully!");
+	}
+
+	// Add this method for feedback
+	_showToast(message) {
+		// Simple feedback implementation
+		const toast = document.createElement('div');
+		toast.textContent = message;
+		toast.style.position = 'fixed';
+		toast.style.bottom = '20px';
+		toast.style.left = '50%';
+		toast.style.transform = 'translateX(-50%)';
+		toast.style.backgroundColor = 'rgba(0,0,0,0.7)';
+		toast.style.color = 'white';
+		toast.style.padding = '10px 20px';
+		toast.style.borderRadius = '4px';
+		toast.style.zIndex = '9999';
+		
+		document.body.appendChild(toast);
+		
+		// Remove after 3 seconds
+		setTimeout(() => {
+			document.body.removeChild(toast);
+		}, 3000);
+	}
     _renderUpdateDialog() {
         const date = new Date();
         const year = date.getFullYear();
@@ -283,6 +335,39 @@ class ActivityManagerCard extends LitElement {
 
         return html`
             <ha-dialog class="confirm-update" heading="Confirm">
+				<div class="name-list-section">
+					<div class="section-header">Task Names:</div>
+					${this._currentItem && this._currentItem.names ? 
+						html`
+							<div class="name-chips">
+								${this._currentItem.names.map((name, index) => html`
+									<div class="name-chip ${index === (this._currentItem.current_name_index || 0) ? 'active' : ''}">
+										${name}
+										<mwc-icon-button 
+											class="remove-name-button"
+											@click=${(e) => this._removeNameFromActivity(e, index)}
+											?disabled=${this._currentItem.names.length <= 1}
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18">
+												<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+											</svg>
+										</mwc-icon-button>
+									</div>
+								`)}
+							</div>
+							<div class="add-name-form">
+								<ha-textfield
+									type="text"
+									id="add-new-name"
+									placeholder="Add another name"
+								></ha-textfield>
+								<mwc-button @click=${this._addNameToActivity}>
+									Add
+								</mwc-button>
+							</div>
+						` : ''
+					}
+				</div>
                 <div class="confirm-grid">
                     <div>
                         Yay, you did it! 🎉 If you completed this earlier, feel
@@ -296,6 +381,11 @@ class ActivityManagerCard extends LitElement {
                         value=${val}
                     >
                     </ha-textfield>
+					${this._currentItem ? html`
+						<div class="last-completed-info">
+							Last completed: ${new Date(this._currentItem.last_completed).toLocaleString()}
+						</div>
+					` : ''}					
                 </div>
                 <mwc-button
                     slot="primaryAction"
@@ -311,6 +401,79 @@ class ActivityManagerCard extends LitElement {
         `;
     }
 
+	// Add this method to sync local and server data
+	async _syncActivityData() {
+		if (this._currentItem) {
+			const itemId = this._currentItem.id;
+			
+			// Fetch fresh data from server
+			const items = await this._hass.callWS({
+				type: "activity_manager/items",
+			}) || [];
+			
+			// Find the current item in the updated data
+			const updatedItem = items.find(item => item.id === itemId);
+			
+			if (updatedItem) {
+				// Update the local data
+				this._currentItem = {
+					...updatedItem,
+					due: new Date(new Date(updatedItem.last_completed).valueOf() + updatedItem.frequency_ms),
+					difference: new Date(new Date(updatedItem.last_completed).valueOf() + updatedItem.frequency_ms) - new Date(),
+				};
+				
+				// Force UI update
+				this.requestUpdate();
+			}
+		}
+	}
+
+	// Call this after operations or when opening dialogs
+	_showUpdateDialog(item) {
+		this._currentItem = item;
+		this._syncActivityData().then(() => {
+			this.shadowRoot.querySelector(".confirm-update").show();
+		});
+	}
+	// Improved remove name method
+	_removeNameFromActivity(event, index) {
+		event.stopPropagation(); // Prevent dialog from closing
+		
+		if (this._currentItem == null) return;
+		if (!this._currentItem.names || this._currentItem.names.length <= 1) {
+			// Don't remove the last name
+			this._showToast("Cannot remove the last name!");
+			return;
+		}
+		
+		try {
+			// Remove locally for immediate UI update
+			const nameToRemove = this._currentItem.names[index];
+			this._currentItem.names.splice(index, 1);
+			
+			// Update current_name_index if needed
+			if (index <= this._currentItem.current_name_index && this._currentItem.current_name_index > 0) {
+				this._currentItem.current_name_index--;
+			}
+			
+			// Call the service to remove the name
+			this._hass.callService("activity_manager", "remove_name", {
+				entity_id: `sensor.${this._currentItem.category.toLowerCase()}_${this._currentItem.names[this._currentItem.current_name_index].toLowerCase().replace(/\s+/g, '_')}`,
+				index: index
+			}).catch(error => {
+				console.error("Error removing name:", error);
+				// Rollback local change if service call fails
+				this._currentItem.names.splice(index, 0, nameToRemove);
+				this._showToast("Error removing name. Please try again.");
+			});
+			
+			this.requestUpdate();
+			this._showToast("Name removed!");
+		} catch (error) {
+			console.error("Error in remove name operation:", error);
+			this._showToast("An error occurred. Please try again.");
+		}
+	}
     _renderRemoveDialog() {
         return html`
             <ha-dialog class="confirm-remove" heading="Confirm">
@@ -332,43 +495,73 @@ class ActivityManagerCard extends LitElement {
         `;
     }
 
-    _addActivity() {
-        let name = this.shadowRoot.querySelector("#name");
-        let category = this.shadowRoot.querySelector("#category");
-        let icon = this.shadowRoot.querySelector("#icon");
-        let last_completed = this.shadowRoot.querySelector("#last-completed");
+	_addActivity() {
+		let nameField = this.shadowRoot.querySelector("#name");
+		if (!nameField) {
+			console.error("Name field not found");
+			return;
+		}
+		
+		let category = this.shadowRoot.querySelector("#category");
+		if (!category) {
+			console.error("Category field not found");
+			return;
+		}
+		
+		let icon = this.shadowRoot.querySelector("#icon");
+		let last_completed = this.shadowRoot.querySelector("#last_completed");
 
-        let frequency = {};
-        frequency.days = utils._getNumber(
-            this.shadowRoot.querySelector("#frequency-day").value,
-            0
-        );
-        frequency.hours = utils._getNumber(
-            this.shadowRoot.querySelector("#frequency-hour").value,
-            0
-        );
-        frequency.minutes = utils._getNumber(
-            this.shadowRoot.querySelector("#frequency-minute").value,
-            0
-        );
-        frequency.seconds = utils._getNumber(
-            this.shadowRoot.querySelector("#frequency-second").value,
-            0
-        );
+		// Handle frequency inputs with null checks
+		let frequencyDay = this.shadowRoot.querySelector("#frequency-day");
+		let frequencyHour = this.shadowRoot.querySelector("#frequency-hour");
+		let frequencyMinute = this.shadowRoot.querySelector("#frequency-minute");
+		let frequencySecond = this.shadowRoot.querySelector("#frequency-second");
+		
+		let frequency = {};
+		frequency.days = utils._getNumber(
+			frequencyDay ? frequencyDay.value : "0",
+			0
+		);
+		frequency.hours = utils._getNumber(
+			frequencyHour ? frequencyHour.value : "0",
+			0
+		);
+		frequency.minutes = utils._getNumber(
+			frequencyMinute ? frequencyMinute.value : "0",
+			0
+		);
+		frequency.seconds = utils._getNumber(
+			frequencySecond ? frequencySecond.value : "0",
+			0
+		);
 
-        this._hass.callService("activity_manager", "add_activity", {
-            name: name.value,
-            category: category.value,
-            frequency: frequency,
-            icon: icon.value,
-            last_completed: last_completed.value,
-        });
-        name.value = "";
-        icon.value = "";
+		// Parse comma-separated names if there are commas
+		let nameValue = nameField.value;
+		if (nameValue.includes(',')) {
+			nameValue = nameValue.split(',').map(n => n.trim()).filter(n => n.length > 0);
+		}
 
-        let manageEl = this.shadowRoot.querySelector(".manage-form");
-        manageEl.close();
-    }
+		// Service call with proper error handling
+		try {
+			this._hass.callService("activity_manager", "add_activity", {
+				name: nameValue,
+				category: category.value,
+				frequency: frequency,
+				icon: icon ? icon.value : undefined,
+				last_completed: last_completed ? last_completed.value : undefined,
+			});
+			
+			// Clear fields
+			nameField.value = "";
+			if (icon) icon.value = "";
+
+			// Close dialog
+			let manageEl = this.shadowRoot.querySelector(".manage-form");
+			if (manageEl) manageEl.close();
+		} catch (error) {
+			console.error("Error adding activity:", error);
+		}
+	}
 
     _fetchData = async () => {
         const items =
@@ -384,12 +577,18 @@ class ActivityManagerCard extends LitElement {
                 const now = new Date();
                 const difference = due - now; // miliseconds
 
-                return {
-                    ...item,
-                    due: due,
-                    difference: difference,
-                    time_unit: "day",
-                };
+				return {
+					...item,
+					// Handle both old and new data format
+					name: item.names && item.names.length > 0 ? 
+						  item.names[item.current_name_index || 0] : 
+						  item.name,
+					names: item.names || [item.name], // Ensure names array exists
+					current_name_index: item.current_name_index || 0,
+					due: due,
+					difference: difference,
+					time_unit: "day",
+				};
             })
             .filter((item) => {
                 if ("category" in this._config)
@@ -452,14 +651,28 @@ class ActivityManagerCard extends LitElement {
         });
     }
 
-    _removeActivity() {
-        if (this._currentItem == null) return;
+	_removeActivity() {
+		if (this._currentItem == null) return;
 
-        this._hass.callWS({
-            type: "activity_manager/remove",
-            item_id: this._currentItem["id"],
-        });
-    }
+		this._hass.callWS({
+			type: "activity_manager/remove",
+			item_id: this._currentItem["id"],
+		}).then(() => {
+			// Manually remove the item from the local array
+			this._activities = this._activities.filter(
+				item => item.id !== this._currentItem["id"]
+			);
+			
+			// Force a UI update
+			this.requestUpdate();
+			
+			// Close the dialog
+			this.shadowRoot.querySelector(".confirm-remove").close();
+			
+			// Optional: Also refresh data from the server
+			this._fetchData();
+		});
+	}
 
     static styles = css`
         :host {
@@ -580,6 +793,60 @@ class ActivityManagerCard extends LitElement {
             --mdc-theme-primary: var(--am-item-due-primary-color);
         }
 
+		.name-list-section {
+			margin-top: 16px;
+			border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+			padding-top: 16px;
+		}
+
+		.section-header {
+			font-weight: bold;
+			margin-bottom: 8px;
+		}
+
+		.name-chips {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin-bottom: 12px;
+		}
+
+		.name-chip {
+			background-color: var(--secondary-background-color);
+			border-radius: 16px;
+			padding: 4px 12px;
+			font-size: 14px;
+		}
+
+		.remove-name-button {
+			--mdc-icon-button-size: 24px;
+			margin-left: 4px;
+		}
+
+		.name-chip {
+			display: flex;
+			align-items: center;
+			background-color: var(--secondary-background-color);
+			border-radius: 16px;
+			padding: 4px 8px 4px 12px;
+			font-size: 14px;
+		}
+
+		.name-chip.active {
+			background-color: var(--primary-color);
+			color: var(--text-primary-color);
+		}
+		
+		.last-completed-info {
+			margin-top: 8px;
+			font-size: 14px;
+			color: var(--secondary-text-color);
+		}
+		.add-name-form {
+			display: flex;
+			gap: 8px;
+			align-items: center;
+		}
         .form-item {
             display: grid;
             grid-template-columns: 1fr 1.8fr;
