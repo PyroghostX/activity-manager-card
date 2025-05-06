@@ -133,7 +133,7 @@ class ActivityManagerCard extends LitElement {
 											  activity.name}
 										</div>
 									<div class="am-item-secondary">
-										${utils._formatTimeAgo(activity.due)} - Last done: ${new Date(activity.last_completed).toLocaleDateString()}
+										${utils._formatTimeAgo(activity.due)} - ${new Date(activity.last_completed).toLocaleDateString(undefined, {month: 'numeric', day: 'numeric'})}
 									</div>
                                     </span>
                                     ${this._renderActionButton(activity)}
@@ -428,12 +428,20 @@ class ActivityManagerCard extends LitElement {
 		}
 	}
 
-	// Call this after operations or when opening dialogs
 	_showUpdateDialog(item) {
 		this._currentItem = item;
-		this._syncActivityData().then(() => {
-			this.shadowRoot.querySelector(".confirm-update").show();
-		});
+		this.requestUpdate();
+		
+		// Wait for DOM update before showing dialog
+		setTimeout(() => {
+			const dialog = this.shadowRoot.querySelector(".confirm-update");
+			if (dialog) {
+				dialog.show();
+				// Ensure dialog fits in viewport
+				dialog.style.maxHeight = "80vh";
+				dialog.style.maxWidth = "345px";
+			}
+		}, 10);
 	}
 	// Improved remove name method
 	_removeNameFromActivity(event, index) {
@@ -858,6 +866,45 @@ class ActivityManagerCard extends LitElement {
         .form-item input::-webkit-inner-spin-button {
             -webkit-appearance: none;
         }
+		ha-dialog {
+		  --mdc-dialog-max-height: 80vh;
+		  width: auto !important;
+		  height: auto !important;
+		  position: fixed;
+		  top: 50% !important;
+		  left: 50% !important;
+		  transform: translate(-50%, -50%) !important;
+		  margin: 0 !important;
+		  max-width: 345px !important; /* Match common bubble card width */
+		  overflow: visible;
+		}
+		@media (max-width: 400px) {
+			ha-dialog {
+				position: relative;
+			}
+			
+		}
+		.confirm-grid {
+		  max-width: 100%;
+		  overflow-y: auto;
+		  max-height: 60vh;
+		}
+
+		.mdc-dialog__surface {
+		  max-width: 345px !important;
+		  width: 95% !important;
+		  overflow: hidden !important;
+		}
+
+		.mdc-dialog__container {
+		  max-width: 345px !important;
+		  width: 95% !important;
+		}
+
+		/* Make input fields resize properly */
+		ha-textfield {
+		  width: 100%;
+		}
 
         .confirm-grid {
             display: grid;
