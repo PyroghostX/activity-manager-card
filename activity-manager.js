@@ -3,7 +3,7 @@ import {
     html,
     css,
     repeat
-} from "https://cdn.jsdelivr.net/gh/lit/dist@2/all/lit-all.min.js";
+} from "/local/community/activity-manager-card/lit-all.min.js";
 
 export const utils = {
     _formatTimeAgo: (date) => {
@@ -287,7 +287,7 @@ class ActivityManagerCard extends LitElement {
                     <div>
                         Yay, you did it! 🎉 If you completed this earlier, feel
                         free to change the date and time below. Great job on
-                        completing your activity5555!
+                        completing your activity777!
                     </div>
                     <ha-textfield
                         type="datetime-local"
@@ -536,60 +536,135 @@ class ActivityManagerCard extends LitElement {
         }
     }
 
-    _showRemoveDialog(ev, item) {
-        ev.stopPropagation();
-        this._currentItem = item;
-        this.requestUpdate();
-        
-        setTimeout(() => {
+_showRemoveDialog(ev, item) {
+    ev.stopPropagation();
+    console.log("Showing remove dialog for item:", item);
+    this._currentItem = item;
+    this.requestUpdate();
+    
+    setTimeout(() => {
+        try {
             const dialog = this.shadowRoot.querySelector(".confirm-remove");
-            if (dialog) {
-                dialog.show();
-                this._adjustDialogSize(dialog);
-            }
-        }, 10);
-    }
-
-    _showUpdateDialog(item) {
-        this._currentItem = item;
-        this._syncActivityData().then(() => {
-            this.requestUpdate();
+            console.log("Remove dialog element:", dialog);
             
-            setTimeout(() => {
-                const dialog = this.shadowRoot.querySelector(".confirm-update");
-                if (dialog) {
-                    dialog.show();
-                    this._adjustDialogSize(dialog);
+            if (!dialog) {
+                console.error("Remove dialog element not found!");
+                return;
+            }
+            
+            if (typeof dialog.show !== 'function') {
+                console.error("Dialog doesn't have show method, trying open");
+                if (typeof dialog.open === 'function') {
+                    dialog.open();
+                } else {
+                    dialog.setAttribute('open', 'true');
                 }
-            }, 10);
-        });
-    }
+            } else {
+                dialog.show();
+            }
+            
+            this._adjustDialogSize(dialog);
+        } catch (error) {
+            console.error("Error showing remove dialog:", error);
+        }
+    }, 100);
+}
 
-    _adjustDialogSize(dialogElement) {
-        if (!dialogElement) return;
-        
-        // Set fixed width that works with bubble cards
-        dialogElement.style.maxWidth = "300px";
-        dialogElement.style.width = "300px";
-        
-        // Get all surfaces and containers within the dialog
-        const surfaces = dialogElement.shadowRoot?.querySelectorAll('.mdc-dialog__surface');
-        const containers = dialogElement.shadowRoot?.querySelectorAll('.mdc-dialog__container');
-        
-        if (surfaces) {
-            surfaces.forEach(surface => {
-                surface.style.maxWidth = "300px";
-                surface.style.width = "300px";
-            });
+_showUpdateDialog(item) {
+    console.log("Showing update dialog for item:", item);
+    this._currentItem = item;
+    
+    // Force immediate update to ensure dialog exists
+    this.requestUpdate();
+    
+    // Give the update a chance to render
+    setTimeout(() => {
+        try {
+            const dialog = this.shadowRoot.querySelector(".confirm-update");
+            console.log("Dialog element:", dialog);
+            
+            if (!dialog) {
+                console.error("Dialog element not found!");
+                return;
+            }
+            
+            // Check if show method exists
+            if (typeof dialog.show !== 'function') {
+                console.error("Dialog doesn't have show method, trying open");
+                if (typeof dialog.open === 'function') {
+                    dialog.open();
+                } else {
+                    // Fallback - set attribute directly
+                    dialog.setAttribute('open', 'true');
+                }
+            } else {
+                dialog.show();
+            }
+            
+            // Apply sizing after showing
+            this._adjustDialogSize(dialog);
+        } catch (error) {
+            console.error("Error showing dialog:", error);
         }
-        
-        if (containers) {
-            containers.forEach(container => {
-                container.style.maxWidth = "300px";
-                container.style.width = "300px";
-            });
+    }, 100); // Longer timeout for more reliability
+}
+
+_adjustDialogSize(dialogElement) {
+    if (!dialogElement) return;
+    
+    // Set fixed width that works with bubble cards
+    dialogElement.style.maxWidth = "300px";
+    dialogElement.style.width = "300px";
+    
+    setTimeout(() => {
+        try {
+            // Check if we're on desktop (wider than 600px)
+            const isDesktop = window.innerWidth > 600;
+            
+            // Only apply padding on desktop
+            if (isDesktop) {
+                console.log("Desktop detected, applying padding for centering");
+                
+                // Try to access the container through shadow DOM
+                const container = dialogElement.shadowRoot?.querySelector('.mdc-dialog__container');
+                if (container) {
+                    container.style.paddingLeft = "240px";
+                } else {
+                    // Fallback: try to find by walking the DOM tree
+                    const walkShadowDOM = (element, callback) => {
+                        if (!element) return;
+                        
+                        // Check if element has a shadow root
+                        if (element.shadowRoot) {
+                            // Look for container in this shadow root
+                            const containers = element.shadowRoot.querySelectorAll('.mdc-dialog__container');
+                            containers.forEach(c => callback(c));
+                            
+                            // Also check children of the shadow root
+                            Array.from(element.shadowRoot.children).forEach(child => {
+                                walkShadowDOM(child, callback);
+                            });
+                        }
+                        
+                        // Check children
+                        Array.from(element.children).forEach(child => {
+                            walkShadowDOM(child, callback);
+                        });
+                    };
+                    
+                    // Walk from dialog element to find container
+                    walkShadowDOM(dialogElement, (container) => {
+                        container.style.paddingLeft = "240px";
+                    });
+                }
+            } else {
+                console.log("Mobile detected, keeping default centering");
+            }
+        } catch (error) {
+            console.error("Error adjusting dialog size:", error);
         }
-    }
+    }, 50);
+}
 
     _switchMode(ev) {
         switch (this._config.mode) {
@@ -953,7 +1028,7 @@ class ActivityManagerCard extends LitElement {
             --mdc-dialog-max-width: 300px !important;
             width: 300px !important;
             max-width: 300px !important;
-            position: fixed;
+            position: relative;
             top: 50% !important;
             left: 50% !important;
             transform: translate(-50%, -50%) !important;
@@ -1022,6 +1097,7 @@ class ActivityManagerCard extends LitElement {
             }
         }
     `;
+
 }
 
 class ActivityManagerCardEditor extends LitElement {
