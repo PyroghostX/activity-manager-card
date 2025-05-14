@@ -284,84 +284,84 @@ class ActivityManagerCard extends LitElement {
         `;
     }
 
-    _renderUpdateDialog() {
-        const date = new Date();
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, "0");
-        const day = date.getDate().toString().padStart(2, "0");
-        const hours = date.getHours().toString().padStart(2, "0");
-        const minutes = date.getMinutes().toString().padStart(2, "0");
-        let val = `${year}-${month}-${day}T${hours}:${minutes}`;
+	_renderUpdateDialog() {
+		const date = new Date();
+		const year = date.getFullYear();
+		const month = (date.getMonth() + 1).toString().padStart(2, "0");
+		const day = date.getDate().toString().padStart(2, "0");
+		const hours = date.getHours().toString().padStart(2, "0");
+		const minutes = date.getMinutes().toString().padStart(2, "0");
+		let val = `${year}-${month}-${day}T${hours}:${minutes}`;
 
-        return html`
-            <ha-dialog class="confirm-update" heading="Confirm">
-                <div class="confirm-grid">
-                    <div>
-                        Yay, you did it! 🎉
-                    </div>
-                    <ha-textfield
-                        type="datetime-local"
-                        id="update-last-completed"
-                        label="Activity Last Completed"
-                        value=${val}
-                    >
-                    </ha-textfield>
-                    
-                    <!-- Add the last completed date info -->
-                    ${this._currentItem ? html`
-                        <div class="last-completed-info">
-                            Last completed: ${new Date(this._currentItem.last_completed).toLocaleString()}
-                        </div>
-                    ` : ''}
-                    
-                    <div class="name-list-section">
-                        <div class="section-header">Task Names:</div>
-                        ${this._currentItem && this._currentItem.names ? 
-                            html`
-                                <div class="name-chips">
-                                    ${this._currentItem.names.map((name, index) => html`
-                                        <div class="name-chip ${index === (this._currentItem.current_name_index || 0) ? 'active' : ''}">
-                                            ${name}
-                                            <mwc-icon-button 
-                                                class="remove-name-button"
-                                                @click=${(e) => this._removeNameFromActivity(e, index)}
-                                                ?disabled=${this._currentItem.names.length <= 1}
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18">
-                                                    <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
-                                                </svg>
-                                            </mwc-icon-button>
-                                        </div>
-                                    `)}
-                                </div>
-                                <div class="add-name-form">
-                                    <ha-textfield
-                                        type="text"
-                                        id="add-new-name"
-                                        placeholder="Add another name"
-                                    ></ha-textfield>
-                                    <mwc-button @click=${this._addNameToActivity} class="inline-add-button">
-                                        Add
-                                    </mwc-button>
-                                </div>
-                            ` : ''
-                        }
-                    </div>
-                </div>
-                <mwc-button
-                    slot="primaryAction"
-                    dialogAction="discard"
-                    @click=${this._updateActivity}
-                    class="update-button"
-                >
-                    Update
-                </mwc-button>
-                <mwc-button slot="secondaryAction" dialogAction="cancel">
-                    Cancel
-                </mwc-button>
-            </ha-dialog>
-        `;
-    }
+		return html`
+			<ha-dialog class="confirm-update" heading="Confirm">
+				<div class="confirm-grid">
+					<div>
+						Yay, you did it! 🎉
+					</div>
+					<ha-textfield
+						type="datetime-local"
+						id="update-last-completed"
+						label="Activity Last Completed"
+						value=${val}
+					>
+					</ha-textfield>
+					
+					<!-- Add the last completed date info -->
+					${this._currentItem ? html`
+						<div class="last-completed-info">
+							Last completed: ${new Date(this._currentItem.last_completed).toLocaleString()}
+						</div>
+					` : ''}
+					
+					<div class="name-list-section">
+						<div class="section-header">Task Names:</div>
+						${this._currentItem && this._currentItem.names ? 
+							html`
+								<div class="name-chips">
+									${this._currentItem.names.map((name, index) => html`
+										<div class="name-chip ${index === (this._currentItem.current_name_index || 0) ? 'active' : ''}">
+											${name}
+											<mwc-icon-button 
+												class="remove-name-button"
+												@click=${(e) => this._removeNameFromActivity(e, index)}
+												?disabled=${this._currentItem.names.length <= 1}
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18">
+													<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+												</svg>
+											</mwc-icon-button>
+										</div>
+									`)}
+								</div>
+								<div class="add-name-form">
+									<ha-textfield
+										type="text"
+										id="add-new-name"
+										placeholder="Add another name"
+									></ha-textfield>
+									<mwc-button @click=${this._addNameToActivity} class="inline-add-button">
+										Add
+									</mwc-button>
+								</div>
+							` : ''
+						}
+					</div>
+				</div>
+				<mwc-button
+					slot="primaryAction"
+					dialogAction="discard"
+					@click=${this._updateActivity}
+					class="update-button"
+				>
+					Update
+				</mwc-button>
+				<mwc-button slot="secondaryAction" dialogAction="cancel">
+					Cancel
+				</mwc-button>
+			</ha-dialog>
+		`;
+	}
 
     _renderRemoveDialog() {
         return html`
@@ -446,57 +446,69 @@ class ActivityManagerCard extends LitElement {
     }
 
     // Enhanced method to adjust dialog size
-    _adjustDialogSize(dialogElement) {
-        if (!dialogElement) return;
-        
-        // Set explicit inline styles to force width overrides
-        dialogElement.style.setProperty('--mdc-dialog-min-width', '400px', 'important');
-        dialogElement.style.setProperty('--mdc-dialog-max-width', '400px', 'important');
-        dialogElement.style.width = '400px';
-        dialogElement.style.maxWidth = '400px';
-        
-        // Find and style the content container
-        const contentElement = dialogElement.querySelector('.mdc-dialog__content');
-        if (contentElement) {
-            contentElement.style.width = '400px';
-            contentElement.style.maxWidth = '400px';
-        }
-        
-        setTimeout(() => {
-            try {
-                // Attempt to further enforce styles by updating shadow DOM elements
-                if (dialogElement.shadowRoot) {
-                    const surface = dialogElement.shadowRoot.querySelector('.mdc-dialog__surface');
-                    if (surface) {
-                        surface.style.setProperty('min-width', '400px', 'important');
-                        surface.style.setProperty('max-width', '400px', 'important');
-                        surface.style.width = '400px';
-                    }
-                    
-                    const container = dialogElement.shadowRoot.querySelector('.mdc-dialog__container');
-                    if (container) {
-                        container.style.maxWidth = '400px';
-                        
-                        // Check if we're on desktop (wider than 600px)
-                        const isDesktop = window.innerWidth > 600;
-                        if (isDesktop) {
-                            console.log("Desktop detected, applying padding for centering");
-                            container.style.paddingLeft = "240px";
-                        }
-                        
-                        // Explicitly center the dialog
-                        container.style.display = 'flex';
-                        container.style.justifyContent = 'center';
-                        container.style.marginLeft = 'auto';
-                        container.style.marginRight = 'auto';
-                    }
+_adjustDialogSize(dialogElement) {
+    if (!dialogElement) return;
+    
+    // Check if we're on mobile (width less than or equal to 600px)
+    const isMobile = window.innerWidth <= 600;
+    const dialogWidth = isMobile ? "300px" : "400px";
+    
+    // Set explicit inline styles to force width overrides
+    dialogElement.style.setProperty('--mdc-dialog-min-width', dialogWidth, 'important');
+    dialogElement.style.setProperty('--mdc-dialog-max-width', dialogWidth, 'important');
+    dialogElement.style.width = dialogWidth;
+    dialogElement.style.maxWidth = dialogWidth;
+    
+    // Find and style the content container
+    const contentElement = dialogElement.querySelector('.mdc-dialog__content');
+    if (contentElement) {
+        contentElement.style.width = dialogWidth;
+        contentElement.style.maxWidth = dialogWidth;
+    }
+    
+    setTimeout(() => {
+        try {
+            // Attempt to further enforce styles by updating shadow DOM elements
+            if (dialogElement.shadowRoot) {
+                const surface = dialogElement.shadowRoot.querySelector('.mdc-dialog__surface');
+                if (surface) {
+                    surface.style.setProperty('min-width', dialogWidth, 'important');
+                    surface.style.setProperty('max-width', dialogWidth, 'important');
+                    surface.style.width = dialogWidth;
                 }
                 
-                // Style buttons
-                const buttons = dialogElement.querySelectorAll('mwc-button');
-                buttons.forEach(button => {
-                    button.setAttribute('raised', '');
+                const container = dialogElement.shadowRoot.querySelector('.mdc-dialog__container');
+                if (container) {
+                    container.style.maxWidth = dialogWidth;
                     
+                    // Only apply padding on desktop
+                    if (!isMobile) {
+                        console.log("Desktop detected, applying padding for centering");
+                        container.style.paddingLeft = "240px";
+                    } else {
+                        console.log("Mobile detected, removing padding for centering");
+                        container.style.paddingLeft = "0";
+                    }
+                    
+                    // Explicitly center the dialog
+                    container.style.display = 'flex';
+                    container.style.justifyContent = 'center';
+                    container.style.marginLeft = 'auto';
+                    container.style.marginRight = 'auto';
+                }
+            }
+            
+            // Style buttons
+            const buttons = dialogElement.querySelectorAll('mwc-button');
+            buttons.forEach(button => {
+                button.setAttribute('raised', '');
+                
+                // Style based on button class
+                if (button.classList.contains('inline-add-button')) {
+                    button.style.setProperty('color', 'white', 'important');
+                    button.style.setProperty('background-color', 'var(--primary-color)', 'important');
+                } else {
+                    // Style based on slot
                     const slot = button.getAttribute('slot');
                     if (slot === 'primaryAction') {
                         button.style.setProperty('color', 'white', 'important');
@@ -505,59 +517,67 @@ class ActivityManagerCard extends LitElement {
                         button.style.setProperty('color', 'white', 'important');
                         button.style.setProperty('background-color', 'var(--secondary-color, #808080)', 'important');
                     }
-                    
-                    button.style.borderRadius = '18px';
-                });
+                }
                 
-            } catch (error) {
-                console.error("Error adjusting dialog size:", error);
-            }
-        }, 50);
-    }
+                button.style.borderRadius = '18px';
+            });
+            
+        } catch (error) {
+            console.error("Error adjusting dialog size:", error);
+        }
+    }, 50);
+}
 
     // Method to apply styling to all buttons
-    _applyCustomButtonStyling() {
-        setTimeout(() => {
-            const allDialogs = this.shadowRoot.querySelectorAll('ha-dialog');
-            allDialogs.forEach(dialog => {
-                const buttons = dialog.querySelectorAll('mwc-button');
-                buttons.forEach(button => {
-                    button.setAttribute('raised', '');
-                    
-                    // Style based on button class and slot
-                    if (button.classList.contains('add-button')) {
-                        button.style.setProperty('color', 'white', 'important');
-                        button.style.setProperty('background-color', 'var(--info-color, #4a90e2)', 'important');
-                    } else if (button.classList.contains('update-button')) {
-                        button.style.setProperty('color', 'white', 'important');
-                        button.style.setProperty('background-color', 'var(--primary-color)', 'important');
-                    } else if (button.classList.contains('remove-button')) {
-                        button.style.setProperty('color', 'white', 'important');
-                        button.style.setProperty('background-color', 'var(--error-color, #ff5252)', 'important');
-                    } else {
-                        // Default styling based on slot
-                        const slot = button.getAttribute('slot');
-                        if (slot === 'primaryAction') {
-                            button.style.setProperty('color', 'white', 'important');
-                            button.style.setProperty('background-color', 'var(--primary-color)', 'important');
-                        } else if (slot === 'secondaryAction') {
-                            button.style.setProperty('color', 'white', 'important');
-                            button.style.setProperty('background-color', 'var(--secondary-color, #808080)', 'important');
-                        }
-                    }
-                    
-                    button.style.borderRadius = '18px';
-                });
-				const inlineAddButtons = dialog.querySelectorAll('.inline-add-button');
-                inlineAddButtons.forEach(button => {
-                    button.setAttribute('raised', '');
-                    button.style.setProperty('color', 'white', 'important');
-                    button.style.setProperty('background-color', 'var(--primary-color)', 'important');
-                    button.style.borderRadius = '18px';
-                });
-            });
-        }, 100);
-    }
+	_applyCustomButtonStyling() {
+		setTimeout(() => {
+			// Check screen size
+			const isMobile = window.innerWidth <= 600;
+			const dialogWidth = isMobile ? "300px" : "400px";
+			
+			const allDialogs = this.shadowRoot.querySelectorAll('ha-dialog');
+			allDialogs.forEach(dialog => {
+				// Set dialog width based on screen size
+				dialog.style.setProperty('--mdc-dialog-min-width', dialogWidth, 'important');
+				dialog.style.setProperty('--mdc-dialog-max-width', dialogWidth, 'important');
+				dialog.style.width = dialogWidth;
+				dialog.style.maxWidth = dialogWidth;
+				
+				// Style buttons
+				const buttons = dialog.querySelectorAll('mwc-button');
+				buttons.forEach(button => {
+					button.setAttribute('raised', '');
+					
+					// Style based on button class and slot
+					if (button.classList.contains('inline-add-button')) {
+						button.style.setProperty('color', 'white', 'important');
+						button.style.setProperty('background-color', 'var(--primary-color)', 'important');
+					} else if (button.classList.contains('add-button')) {
+						button.style.setProperty('color', 'white', 'important');
+						button.style.setProperty('background-color', 'var(--info-color, #4a90e2)', 'important');
+					} else if (button.classList.contains('update-button')) {
+						button.style.setProperty('color', 'white', 'important');
+						button.style.setProperty('background-color', 'var(--primary-color)', 'important');
+					} else if (button.classList.contains('remove-button')) {
+						button.style.setProperty('color', 'white', 'important');
+						button.style.setProperty('background-color', 'var(--error-color, #ff5252)', 'important');
+					} else {
+						// Default styling based on slot
+						const slot = button.getAttribute('slot');
+						if (slot === 'primaryAction') {
+							button.style.setProperty('color', 'white', 'important');
+							button.style.setProperty('background-color', 'var(--primary-color)', 'important');
+						} else if (slot === 'secondaryAction') {
+							button.style.setProperty('color', 'white', 'important');
+							button.style.setProperty('background-color', 'var(--secondary-color, #808080)', 'important');
+						}
+					}
+					
+					button.style.borderRadius = '18px';
+				});
+			});
+		}, 100);
+	}
 
     _switchMode(ev) {
         switch (this._config.mode) {
@@ -858,32 +878,114 @@ class ActivityManagerCard extends LitElement {
     };
 
     // CSS styles with updated dialog and button styling
-    static styles = css`
-        :host {
-            --am-item-primary-color: #ffffff;
-            --am-item-background-color: #00000000;
-            --am-item-due-primary-color: #ff4a4a;
-            --am-item-due-background-color: #ff4a4a14;
-            --am-item-due-soon-primary-color: #ffffff;
-            --am-item-due-soon-background-color: #00000020;
-            --am-item-primary-font-size: 14px;
-            --am-item-secondary-font-size: 12px;
-            --mdc-theme-primary: var(--primary-text-color);
-            
-            /* Define custom button colors */
-            --am-primary-button-bg: var(--primary-color);
-            --am-primary-button-text: white;
-            --am-secondary-button-bg: var(--secondary-color, #808080);
-            --am-secondary-button-text: white;
-        }
-        
-        /* Dialog styling */
-        ha-dialog {
-            --dialog-width: 400px !important;
-            --dialog-content-padding: 16px !important;
-            --mdc-dialog-min-width: 400px !important;
-            --mdc-dialog-max-width: 400px !important;
-        }
+	static styles = css`
+		:host {
+			--am-item-primary-color: #ffffff;
+			--am-item-background-color: #00000000;
+			--am-item-due-primary-color: #ff4a4a;
+			--am-item-due-background-color: #ff4a4a14;
+			--am-item-due-soon-primary-color: #ffffff;
+			--am-item-due-soon-background-color: #00000020;
+			--am-item-primary-font-size: 14px;
+			--am-item-secondary-font-size: 12px;
+			--mdc-theme-primary: var(--primary-text-color);
+			
+			/* Define custom button colors */
+			--am-primary-button-bg: var(--primary-color);
+			--am-primary-button-text: white;
+			--am-secondary-button-bg: var(--secondary-color, #808080);
+			--am-secondary-button-text: white;
+			
+			/* Responsive dialog width variables */
+			--dialog-desktop-width: 400px;
+			--dialog-mobile-width: 300px;
+		}
+		
+		/* Base dialog styling with media queries */
+		ha-dialog {
+			--dialog-content-padding: 16px !important;
+		}
+		
+		/* Mobile styles (up to 600px) */
+		@media (max-width: 600px) {
+			ha-dialog {
+				--dialog-width: var(--dialog-mobile-width) !important;
+				--mdc-dialog-min-width: var(--dialog-mobile-width) !important;
+				--mdc-dialog-max-width: var(--dialog-mobile-width) !important;
+			}
+			
+			.confirm-update,
+			.confirm-remove,
+			.manage-form {
+				width: var(--dialog-mobile-width) !important;
+				max-width: var(--dialog-mobile-width) !important;
+				--mdc-dialog-min-width: var(--dialog-mobile-width) !important;
+				--mdc-dialog-max-width: var(--dialog-mobile-width) !important;
+			}
+		}
+		
+		/* Desktop styles (greater than 600px) */
+		@media (min-width: 601px) {
+			ha-dialog {
+				--dialog-width: var(--dialog-desktop-width) !important;
+				--mdc-dialog-min-width: var(--dialog-desktop-width) !important;
+				--mdc-dialog-max-width: var(--dialog-desktop-width) !important;
+			}
+			
+			.confirm-update,
+			.confirm-remove,
+			.manage-form {
+				width: var(--dialog-desktop-width) !important;
+				max-width: var(--dialog-desktop-width) !important;
+				--mdc-dialog-min-width: var(--dialog-desktop-width) !important;
+				--mdc-dialog-max-width: var(--dialog-desktop-width) !important;
+			}
+		}
+		
+		/* Style for the inline Add button */
+		.inline-add-button {
+			background-color: var(--primary-color) !important;
+			color: white !important;
+			border-radius: 18px !important;
+			--mdc-theme-primary: var(--primary-color) !important;
+			--mdc-button-raised: true !important;
+		}
+		
+		/* Button styling - specific colors for different buttons */
+		mwc-button[slot="primaryAction"] {
+			background-color: var(--primary-color) !important;
+			color: white !important;
+			border-radius: 18px !important;
+			--mdc-theme-primary: var(--primary-color) !important;
+		}
+		
+		mwc-button[slot="secondaryAction"] {
+			background-color: var(--secondary-color, #808080) !important;
+			color: white !important;
+			border-radius: 18px !important;
+			--mdc-theme-primary: var(--secondary-color, #808080) !important;
+		}
+		
+		/* Special button styles */
+		.add-button {
+			background-color: var(--info-color, #4a90e2) !important;
+			color: white !important;
+		}
+		
+		.update-button {
+			background-color: var(--primary-color) !important;
+			color: white !important;
+		}
+		
+		.remove-button {
+			background-color: var(--error-color, #ff5252) !important;
+			color: white !important;
+		}
+		
+		/* Force buttons to show raised style */
+		mwc-button {
+			--mdc-button-raised: true !important;
+		}
         
         /* Override for specific dialogs */
         .confirm-update,
