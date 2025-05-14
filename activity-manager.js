@@ -75,6 +75,12 @@ class ActivityManagerCard extends LitElement {
         (async () => await loadHaForm())();
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        // Apply button styling after connected
+        setTimeout(() => this._applyCustomButtonStyling(), 100);
+    }
+
     set hass(hass) {
         this._hass = hass;
         if (!this._runOnce) {
@@ -99,7 +105,7 @@ class ActivityManagerCard extends LitElement {
     }
 
     render() {
-        return html`
+        const result = html`
             <ha-card>
                 ${this._renderHeader()}
                 <div class="content">
@@ -146,6 +152,11 @@ class ActivityManagerCard extends LitElement {
             ${this._renderAddDialog()} ${this._renderUpdateDialog()}
             ${this._renderRemoveDialog()}
         `;
+        
+        // Schedule styling after rendering
+        setTimeout(() => this._applyCustomButtonStyling(), 0);
+        
+        return result;
     }
 
     _renderActionButton(activity) {
@@ -169,6 +180,43 @@ class ActivityManagerCard extends LitElement {
                           </mwc-icon-button>
                       `
                     : ``}
+            </div>
+        `;
+    }
+
+    _renderHeader() {
+        return html`
+            <div class="header">
+                <div class="icon-container">
+                    <ha-icon icon="${this._config.icon}"></ha-icon>
+                </div>
+                <div class="info-container">
+                    <div class="primary">${this._config.header}</div>
+                </div>
+                <div class="action-container">
+                    <mwc-icon-button
+                        @click=${() => this._showAddDialog()}
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                d="M14.3 21.7C13.6 21.9 12.8 22 12 22C6.5 22 2 17.5 2 12S6.5 2 12 2C13.3 2 14.6 2.3 15.8 2.7L14.2 4.3C13.5 4.1 12.8 4 12 4C7.6 4 4 7.6 4 12S7.6 20 12 20C12.4 20 12.9 20 13.3 19.9C13.5 20.6 13.9 21.2 14.3 21.7M7.9 10.1L6.5 11.5L11 16L21 6L19.6 4.6L11 13.2L7.9 10.1M18 14V17H15V19H18V22H20V19H23V17H20V14H18Z"
+                            />
+                        </svg>
+                    </mwc-icon-button>
+                    <mwc-icon-button @click=${this._switchMode}>
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                d="M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z"
+                            />
+                        </svg>
+                    </mwc-icon-button>
+                </div>
             </div>
         `;
     }
@@ -221,54 +269,18 @@ class ActivityManagerCard extends LitElement {
                     </div>
                     </ha-form>
                 </form>
-                <mwc-button slot="primaryAction" dialogAction="discard" @click=${this._addActivity}>
+                <mwc-button 
+                    slot="primaryAction" 
+                    dialogAction="discard" 
+                    @click=${this._addActivity}
+                    class="add-button"
+                >
                     Add
                 </mwc-button>
                 <mwc-button slot="secondaryAction" dialogAction="cancel">
                     Cancel
                 </mwc-button>
             </ha-dialog>
-        `;
-    }
-
-    _renderHeader() {
-        return html`
-            <div class="header">
-                <div class="icon-container">
-                    <ha-icon icon="${this._config.icon}"></ha-icon>
-                </div>
-                <div class="info-container">
-                    <div class="primary">${this._config.header}</div>
-                </div>
-                <div class="action-container">
-                    <mwc-icon-button
-                        @click=${() => {
-                            this.shadowRoot
-                                .querySelector(".manage-form")
-                                .show();
-                        }}
-                    >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                d="M14.3 21.7C13.6 21.9 12.8 22 12 22C6.5 22 2 17.5 2 12S6.5 2 12 2C13.3 2 14.6 2.3 15.8 2.7L14.2 4.3C13.5 4.1 12.8 4 12 4C7.6 4 4 7.6 4 12S7.6 20 12 20C12.4 20 12.9 20 13.3 19.9C13.5 20.6 13.9 21.2 14.3 21.7M7.9 10.1L6.5 11.5L11 16L21 6L19.6 4.6L11 13.2L7.9 10.1M18 14V17H15V19H18V22H20V19H23V17H20V14H18Z"
-                            />
-                        </svg>
-                    </mwc-icon-button>
-                    <mwc-icon-button @click=${this._switchMode}>
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                d="M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z"
-                            />
-                        </svg>
-                    </mwc-icon-button>
-                </div>
-            </div>
         `;
     }
 
@@ -285,9 +297,7 @@ class ActivityManagerCard extends LitElement {
             <ha-dialog class="confirm-update" heading="Confirm">
                 <div class="confirm-grid">
                     <div>
-                        Yay, you did it! 🎉 If you completed this earlier, feel
-                        free to change the date and time below. Great job on
-                        completing your activity777!
+                        Yay, you did it! 🎉
                     </div>
                     <ha-textfield
                         type="datetime-local"
@@ -330,7 +340,7 @@ class ActivityManagerCard extends LitElement {
                                         id="add-new-name"
                                         placeholder="Add another name"
                                     ></ha-textfield>
-                                    <mwc-button @click=${this._addNameToActivity}>
+                                    <mwc-button @click=${this._addNameToActivity} class="inline-add-button">
                                         Add
                                     </mwc-button>
                                 </div>
@@ -342,6 +352,7 @@ class ActivityManagerCard extends LitElement {
                     slot="primaryAction"
                     dialogAction="discard"
                     @click=${this._updateActivity}
+                    class="update-button"
                 >
                     Update
                 </mwc-button>
@@ -363,6 +374,7 @@ class ActivityManagerCard extends LitElement {
                     slot="primaryAction"
                     dialogAction="discard"
                     @click=${this._removeActivity}
+                    class="remove-button"
                 >
                     Remove
                 </mwc-button>
@@ -371,6 +383,192 @@ class ActivityManagerCard extends LitElement {
                 </mwc-button>
             </ha-dialog>
         `;
+    }
+
+    // New method to show any dialog consistently
+    _showDialog(dialogSelector, itemToSet = null) {
+        console.log(`Showing dialog: ${dialogSelector}`);
+        
+        // Set current item if provided
+        if (itemToSet !== null) {
+            this._currentItem = itemToSet;
+        }
+        
+        // Force immediate update to ensure dialog exists
+        this.requestUpdate();
+        
+        // Give the update a chance to render
+        setTimeout(() => {
+            try {
+                const dialog = this.shadowRoot.querySelector(dialogSelector);
+                console.log("Dialog element:", dialog);
+                
+                if (!dialog) {
+                    console.error(`Dialog element not found: ${dialogSelector}`);
+                    return;
+                }
+                
+                // Check if show method exists
+                if (typeof dialog.show !== 'function') {
+                    console.error("Dialog doesn't have show method, trying open");
+                    if (typeof dialog.open === 'function') {
+                        dialog.open();
+                    } else {
+                        // Fallback - set attribute directly
+                        dialog.setAttribute('open', 'true');
+                    }
+                } else {
+                    dialog.show();
+                }
+                
+                // Apply sizing after showing
+                this._adjustDialogSize(dialog);
+            } catch (error) {
+                console.error(`Error showing dialog ${dialogSelector}:`, error);
+            }
+        }, 100); // Longer timeout for more reliability
+    }
+
+    // Method to show the Add dialog
+    _showAddDialog() {
+        this._showDialog(".manage-form");
+    }
+
+    // Updated method to show update dialog
+    _showUpdateDialog(item) {
+        this._showDialog(".confirm-update", item);
+    }
+
+    // Updated method to show remove dialog
+    _showRemoveDialog(ev, item) {
+        ev.stopPropagation();
+        this._showDialog(".confirm-remove", item);
+    }
+
+    // Enhanced method to adjust dialog size
+    _adjustDialogSize(dialogElement) {
+        if (!dialogElement) return;
+        
+        // Set explicit inline styles to force width overrides
+        dialogElement.style.setProperty('--mdc-dialog-min-width', '400px', 'important');
+        dialogElement.style.setProperty('--mdc-dialog-max-width', '400px', 'important');
+        dialogElement.style.width = '400px';
+        dialogElement.style.maxWidth = '400px';
+        
+        // Find and style the content container
+        const contentElement = dialogElement.querySelector('.mdc-dialog__content');
+        if (contentElement) {
+            contentElement.style.width = '400px';
+            contentElement.style.maxWidth = '400px';
+        }
+        
+        setTimeout(() => {
+            try {
+                // Attempt to further enforce styles by updating shadow DOM elements
+                if (dialogElement.shadowRoot) {
+                    const surface = dialogElement.shadowRoot.querySelector('.mdc-dialog__surface');
+                    if (surface) {
+                        surface.style.setProperty('min-width', '400px', 'important');
+                        surface.style.setProperty('max-width', '400px', 'important');
+                        surface.style.width = '400px';
+                    }
+                    
+                    const container = dialogElement.shadowRoot.querySelector('.mdc-dialog__container');
+                    if (container) {
+                        container.style.maxWidth = '400px';
+                        
+                        // Check if we're on desktop (wider than 600px)
+                        const isDesktop = window.innerWidth > 600;
+                        if (isDesktop) {
+                            console.log("Desktop detected, applying padding for centering");
+                            container.style.paddingLeft = "240px";
+                        }
+                        
+                        // Explicitly center the dialog
+                        container.style.display = 'flex';
+                        container.style.justifyContent = 'center';
+                        container.style.marginLeft = 'auto';
+                        container.style.marginRight = 'auto';
+                    }
+                }
+                
+                // Style buttons
+                const buttons = dialogElement.querySelectorAll('mwc-button');
+                buttons.forEach(button => {
+                    button.setAttribute('raised', '');
+                    
+                    const slot = button.getAttribute('slot');
+                    if (slot === 'primaryAction') {
+                        button.style.setProperty('color', 'white', 'important');
+                        button.style.setProperty('background-color', 'var(--primary-color)', 'important');
+                    } else if (slot === 'secondaryAction') {
+                        button.style.setProperty('color', 'white', 'important');
+                        button.style.setProperty('background-color', 'var(--secondary-color, #808080)', 'important');
+                    }
+                    
+                    button.style.borderRadius = '18px';
+                });
+                
+            } catch (error) {
+                console.error("Error adjusting dialog size:", error);
+            }
+        }, 50);
+    }
+
+    // Method to apply styling to all buttons
+    _applyCustomButtonStyling() {
+        setTimeout(() => {
+            const allDialogs = this.shadowRoot.querySelectorAll('ha-dialog');
+            allDialogs.forEach(dialog => {
+                const buttons = dialog.querySelectorAll('mwc-button');
+                buttons.forEach(button => {
+                    button.setAttribute('raised', '');
+                    
+                    // Style based on button class and slot
+                    if (button.classList.contains('add-button')) {
+                        button.style.setProperty('color', 'white', 'important');
+                        button.style.setProperty('background-color', 'var(--info-color, #4a90e2)', 'important');
+                    } else if (button.classList.contains('update-button')) {
+                        button.style.setProperty('color', 'white', 'important');
+                        button.style.setProperty('background-color', 'var(--primary-color)', 'important');
+                    } else if (button.classList.contains('remove-button')) {
+                        button.style.setProperty('color', 'white', 'important');
+                        button.style.setProperty('background-color', 'var(--error-color, #ff5252)', 'important');
+                    } else {
+                        // Default styling based on slot
+                        const slot = button.getAttribute('slot');
+                        if (slot === 'primaryAction') {
+                            button.style.setProperty('color', 'white', 'important');
+                            button.style.setProperty('background-color', 'var(--primary-color)', 'important');
+                        } else if (slot === 'secondaryAction') {
+                            button.style.setProperty('color', 'white', 'important');
+                            button.style.setProperty('background-color', 'var(--secondary-color, #808080)', 'important');
+                        }
+                    }
+                    
+                    button.style.borderRadius = '18px';
+                });
+				const inlineAddButtons = dialog.querySelectorAll('.inline-add-button');
+                inlineAddButtons.forEach(button => {
+                    button.setAttribute('raised', '');
+                    button.style.setProperty('color', 'white', 'important');
+                    button.style.setProperty('background-color', 'var(--primary-color)', 'important');
+                    button.style.borderRadius = '18px';
+                });
+            });
+        }, 100);
+    }
+
+    _switchMode(ev) {
+        switch (this._config.mode) {
+            case "basic":
+                this._config.mode = "manage";
+                break;
+            case "manage":
+                this._config.mode = "basic";
+                break;
+        }
+        this.requestUpdate();
     }
 
     _addActivity() {
@@ -439,243 +637,6 @@ class ActivityManagerCard extends LitElement {
         } catch (error) {
             console.error("Error adding activity:", error);
         }
-    }
-
-    _fetchData = async () => {
-        try {
-            const items =
-                (await this._hass?.callWS({
-                    type: "activity_manager/items",
-                })) || [];
-
-            // Check if there are changes before updating
-            const hasChanges = 
-                this._activities.length !== items.length ||
-                !this._activities.every(act => 
-                    items.some(item => item.id === act.id)
-                );
-
-            this._activities = items
-                .map((item) => {
-                    const completed = new Date(item.last_completed);
-                    const due = new Date(completed.valueOf() + item.frequency_ms);
-                    const now = new Date();
-                    const difference = due - now; // milliseconds
-
-                    return {
-                        ...item,
-                        // Handle both old and new data format
-                        name: item.names && item.names.length > 0 ? 
-                            item.names[item.current_name_index || 0] : 
-                            item.name,
-                        names: item.names || [item.name], // Ensure names array exists
-                        current_name_index: item.current_name_index || 0,
-                        due: due,
-                        difference: difference,
-                        time_unit: "day",
-                    };
-                })
-                .filter((item) => {
-                    if ("category" in this._config)
-                        return (
-                            item["category"] == this._config["category"] ||
-                            item["category"] == "Activities"
-                        );
-                    return true;
-                })
-                .filter((item) => {
-                    if (this._config.showDueOnly) return item["difference"] < 0;
-                    return true;
-                })
-                .sort((a, b) => {
-                    // Sort by due date (soonest first)
-                    if (a.difference < 0 && b.difference >= 0) return -1;
-                    if (a.difference >= 0 && b.difference < 0) return 1;
-                    return a.difference - b.difference;
-                });
-
-            // Force UI update if there were changes
-            if (hasChanges) {
-                this.requestUpdate();
-            }
-        } catch (error) {
-            console.error("Error fetching activity data:", error);
-        }
-    };
-
-    // Sync local and server data
-    async _syncActivityData() {
-        if (this._currentItem) {
-            const itemId = this._currentItem.id;
-            
-            try {
-                // Fetch fresh data from server
-                const items = await this._hass.callWS({
-                    type: "activity_manager/items",
-                }) || [];
-                
-                // Find the current item in the updated data
-                const updatedItem = items.find(item => item.id === itemId);
-                
-                if (updatedItem) {
-                    // Update the local data
-                    this._currentItem = {
-                        ...updatedItem,
-                        due: new Date(new Date(updatedItem.last_completed).valueOf() + updatedItem.frequency_ms),
-                        difference: new Date(new Date(updatedItem.last_completed).valueOf() + updatedItem.frequency_ms) - new Date(),
-                        names: updatedItem.names || [updatedItem.name], // Ensure names array exists
-                        current_name_index: updatedItem.current_name_index || 0,
-                    };
-                    
-                    // Force UI update
-                    this.requestUpdate();
-                }
-            } catch (error) {
-                console.error("Error syncing activity data:", error);
-            }
-        }
-    }
-
-_showRemoveDialog(ev, item) {
-    ev.stopPropagation();
-    console.log("Showing remove dialog for item:", item);
-    this._currentItem = item;
-    this.requestUpdate();
-    
-    setTimeout(() => {
-        try {
-            const dialog = this.shadowRoot.querySelector(".confirm-remove");
-            console.log("Remove dialog element:", dialog);
-            
-            if (!dialog) {
-                console.error("Remove dialog element not found!");
-                return;
-            }
-            
-            if (typeof dialog.show !== 'function') {
-                console.error("Dialog doesn't have show method, trying open");
-                if (typeof dialog.open === 'function') {
-                    dialog.open();
-                } else {
-                    dialog.setAttribute('open', 'true');
-                }
-            } else {
-                dialog.show();
-            }
-            
-            this._adjustDialogSize(dialog);
-        } catch (error) {
-            console.error("Error showing remove dialog:", error);
-        }
-    }, 100);
-}
-
-_showUpdateDialog(item) {
-    console.log("Showing update dialog for item:", item);
-    this._currentItem = item;
-    
-    // Force immediate update to ensure dialog exists
-    this.requestUpdate();
-    
-    // Give the update a chance to render
-    setTimeout(() => {
-        try {
-            const dialog = this.shadowRoot.querySelector(".confirm-update");
-            console.log("Dialog element:", dialog);
-            
-            if (!dialog) {
-                console.error("Dialog element not found!");
-                return;
-            }
-            
-            // Check if show method exists
-            if (typeof dialog.show !== 'function') {
-                console.error("Dialog doesn't have show method, trying open");
-                if (typeof dialog.open === 'function') {
-                    dialog.open();
-                } else {
-                    // Fallback - set attribute directly
-                    dialog.setAttribute('open', 'true');
-                }
-            } else {
-                dialog.show();
-            }
-            
-            // Apply sizing after showing
-            this._adjustDialogSize(dialog);
-        } catch (error) {
-            console.error("Error showing dialog:", error);
-        }
-    }, 100); // Longer timeout for more reliability
-}
-
-_adjustDialogSize(dialogElement) {
-    if (!dialogElement) return;
-    
-    // Set fixed width that works with bubble cards
-    dialogElement.style.maxWidth = "300px";
-    dialogElement.style.width = "300px";
-    
-    setTimeout(() => {
-        try {
-            // Check if we're on desktop (wider than 600px)
-            const isDesktop = window.innerWidth > 600;
-            
-            // Only apply padding on desktop
-            if (isDesktop) {
-                console.log("Desktop detected, applying padding for centering");
-                
-                // Try to access the container through shadow DOM
-                const container = dialogElement.shadowRoot?.querySelector('.mdc-dialog__container');
-                if (container) {
-                    container.style.paddingLeft = "240px";
-                } else {
-                    // Fallback: try to find by walking the DOM tree
-                    const walkShadowDOM = (element, callback) => {
-                        if (!element) return;
-                        
-                        // Check if element has a shadow root
-                        if (element.shadowRoot) {
-                            // Look for container in this shadow root
-                            const containers = element.shadowRoot.querySelectorAll('.mdc-dialog__container');
-                            containers.forEach(c => callback(c));
-                            
-                            // Also check children of the shadow root
-                            Array.from(element.shadowRoot.children).forEach(child => {
-                                walkShadowDOM(child, callback);
-                            });
-                        }
-                        
-                        // Check children
-                        Array.from(element.children).forEach(child => {
-                            walkShadowDOM(child, callback);
-                        });
-                    };
-                    
-                    // Walk from dialog element to find container
-                    walkShadowDOM(dialogElement, (container) => {
-                        container.style.paddingLeft = "240px";
-                    });
-                }
-            } else {
-                console.log("Mobile detected, keeping default centering");
-            }
-        } catch (error) {
-            console.error("Error adjusting dialog size:", error);
-        }
-    }, 50);
-}
-
-    _switchMode(ev) {
-        switch (this._config.mode) {
-            case "basic":
-                this._config.mode = "manage";
-                break;
-            case "manage":
-                this._config.mode = "basic";
-                break;
-        }
-        this.requestUpdate();
     }
 
     _updateActivity() {
@@ -834,6 +795,69 @@ _adjustDialogSize(dialogElement) {
         }, 3000);
     }
 
+    _fetchData = async () => {
+        try {
+            const items =
+                (await this._hass?.callWS({
+                    type: "activity_manager/items",
+                })) || [];
+
+            // Check if there are changes before updating
+            const hasChanges = 
+                this._activities.length !== items.length ||
+                !this._activities.every(act => 
+                    items.some(item => item.id === act.id)
+                );
+
+            this._activities = items
+                .map((item) => {
+                    const completed = new Date(item.last_completed);
+                    const due = new Date(completed.valueOf() + item.frequency_ms);
+                    const now = new Date();
+                    const difference = due - now; // milliseconds
+
+                    return {
+                        ...item,
+                        // Handle both old and new data format
+                        name: item.names && item.names.length > 0 ? 
+                            item.names[item.current_name_index || 0] : 
+                            item.name,
+                        names: item.names || [item.name], // Ensure names array exists
+                        current_name_index: item.current_name_index || 0,
+                        due: due,
+                        difference: difference,
+                        time_unit: "day",
+                    };
+                })
+                .filter((item) => {
+                    if ("category" in this._config)
+                        return (
+                            item["category"] == this._config["category"] ||
+                            item["category"] == "Activities"
+                        );
+                    return true;
+                })
+                .filter((item) => {
+                    if (this._config.showDueOnly) return item["difference"] < 0;
+                    return true;
+                })
+                .sort((a, b) => {
+                    // Sort by due date (soonest first)
+                    if (a.difference < 0 && b.difference >= 0) return -1;
+                    if (a.difference >= 0 && b.difference < 0) return 1;
+                    return a.difference - b.difference;
+                });
+
+            // Force UI update if there were changes
+            if (hasChanges) {
+                this.requestUpdate();
+            }
+        } catch (error) {
+            console.error("Error fetching activity data:", error);
+        }
+    };
+
+    // CSS styles with updated dialog and button styling
     static styles = css`
         :host {
             --am-item-primary-color: #ffffff;
@@ -845,7 +869,69 @@ _adjustDialogSize(dialogElement) {
             --am-item-primary-font-size: 14px;
             --am-item-secondary-font-size: 12px;
             --mdc-theme-primary: var(--primary-text-color);
+            
+            /* Define custom button colors */
+            --am-primary-button-bg: var(--primary-color);
+            --am-primary-button-text: white;
+            --am-secondary-button-bg: var(--secondary-color, #808080);
+            --am-secondary-button-text: white;
         }
+        
+        /* Dialog styling */
+        ha-dialog {
+            --dialog-width: 400px !important;
+            --dialog-content-padding: 16px !important;
+            --mdc-dialog-min-width: 400px !important;
+            --mdc-dialog-max-width: 400px !important;
+        }
+        
+        /* Override for specific dialogs */
+        .confirm-update,
+        .confirm-remove,
+        .manage-form {
+            width: 400px !important;
+            max-width: 400px !important;
+            --mdc-dialog-min-width: 400px !important;
+            --mdc-dialog-max-width: 400px !important;
+        }
+        
+        /* Button styling - specific colors for different buttons */
+        mwc-button[slot="primaryAction"] {
+            background-color: var(--primary-color) !important;
+            color: white !important;
+            border-radius: 18px !important;
+            --mdc-theme-primary: var(--primary-color) !important;
+        }
+        
+        mwc-button[slot="secondaryAction"] {
+            background-color: var(--secondary-color, #808080) !important;
+            color: white !important;
+            border-radius: 18px !important;
+            --mdc-theme-primary: var(--secondary-color, #808080) !important;
+        }
+        
+        /* Special button styles */
+        .add-button {
+            background-color: var(--info-color, #4a90e2) !important;
+            color: white !important;
+        }
+        
+        .update-button {
+            background-color: var(--primary-color) !important;
+            color: white !important;
+        }
+        
+        .remove-button {
+            background-color: var(--error-color, #ff5252) !important;
+            color: white !important;
+        }
+        
+        /* Force buttons to show raised style */
+        mwc-button {
+            --mdc-button-raised: true !important;
+        }
+        
+        /* All other styles remain the same */
         .content {
             padding: 0 12px 12px 12px;
         }
@@ -942,7 +1028,7 @@ _adjustDialogSize(dialogElement) {
             color: var(--am-item-due-soon-primary-color, #ffffff);
             background-color: var(
                 --am-item-due-soon-background-color,
-                #00000014
+                #00000020
             );
             --mdc-theme-primary: var(--am-item-due-soon-primary-color);
         }
@@ -998,7 +1084,14 @@ _adjustDialogSize(dialogElement) {
             max-width: 100%;
             overflow-x: auto;
         }
-        
+		/* Style for the inline Add button */
+		.inline-add-button {
+			background-color: var(--secondary-color) !important;
+			color: white !important;
+			border-radius: 18px !important;
+			--mdc-theme-primary: var(--secondary-color) !important;
+			--mdc-button-raised: true !important;
+		}       
         .name-chip {
             display: flex;
             align-items: center;
@@ -1022,26 +1115,6 @@ _adjustDialogSize(dialogElement) {
         .remove-name-button {
             --mdc-icon-button-size: 24px;
             margin-left: 4px;
-        }
-        
-        ha-dialog {
-            --mdc-dialog-max-width: 300px !important;
-            width: 300px !important;
-            max-width: 300px !important;
-            position: relative;
-            top: 50% !important;
-            left: 50% !important;
-            transform: translate(-50%, -50%) !important;
-            margin: 0 !important;
-            overflow: visible;
-            box-sizing: border-box;
-        }
-        
-        .mdc-dialog__surface, 
-        .mdc-dialog__container {
-            max-width: 300px !important;
-            width: 300px !important;
-            box-sizing: border-box !important;
         }
         
         ha-textfield {
@@ -1097,7 +1170,6 @@ _adjustDialogSize(dialogElement) {
             }
         }
     `;
-
 }
 
 class ActivityManagerCardEditor extends LitElement {
