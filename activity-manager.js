@@ -40,6 +40,7 @@ export const utils = {
 class ActivityManagerCard extends LitElement {
     _currentItem = null;
     _activities = [];
+	_unsubscribe = null;
 
     static getConfigElement() {
         return document.createElement("activity-manager-card-editor");
@@ -294,23 +295,21 @@ class ActivityManagerCard extends LitElement {
 		let val = `${year}-${month}-${day}T${hours}:${minutes}`;
 
 		return html`
-			<ha-dialog class="confirm-update" heading="Confirm">
+			<ha-dialog class="confirm-update" heading="Yay, you did it! 🎉">
 				<div class="confirm-grid">
-					<div>
-						Yay, you did it! 🎉
-					</div>
 					<ha-textfield
 						type="datetime-local"
 						id="update-last-completed"
-						label="Activity Last Completed"
+						label="Date you completed it:"
 						value=${val}
 					>
 					</ha-textfield>
-					
-					<!-- Add the last completed date info -->
 					${this._currentItem ? html`
 						<div class="last-completed-info">
 							Last completed: ${new Date(this._currentItem.last_completed).toLocaleString()}
+						</div>
+						<div class="last-completed-info">
+							Due date: ${new Date(new Date(this._currentItem.last_completed).valueOf() + this._currentItem.frequency_ms).toLocaleString()}
 						</div>
 					` : ''}
 					
@@ -659,69 +658,82 @@ _adjustDialogSize(dialogElement) {
         }
     }
 
-    _updateActivity() {
-        if (this._currentItem == null) return;
+	_updateActivity() {
+		if (this._currentItem == null) return;
 
-        let last_completed = this.shadowRoot.querySelector(
-            "#update-last-completed"
-        );
+		let last_completed = this.shadowRoot.querySelector("#update-last-completed");
 
-        try {
-            this._hass.callWS({
-                type: "activity_manager/update",
-                item_id: this._currentItem["id"],
-                last_completed: last_completed.value,
-            });
-            
-            // Close dialog
-            const dialog = this.shadowRoot.querySelector(".confirm-update");
-            if (dialog) dialog.close();
-            
-            // Update locally for immediate feedback
-            this._currentItem.last_completed = new Date(last_completed.value).toISOString();
-            if (this._currentItem.names && this._currentItem.names.length > 1) {
-                this._currentItem.current_name_index = (this._currentItem.current_name_index + 1) % this._currentItem.names.length;
-            }
-            
-            // Refresh data
-            this._fetchData();
-        } catch (error) {
-            console.error("Error updating activity:", error);
-            this._showToast("Error updating activity. Please try again.");
+		// Find the actual entity_id
+		this._getEntityIdForActivity(this._currentItem).then(entityId => {
+			if (!entityId) {
+				this._showToast("Could not find entity for this activity");
+				return;
+			}
+			
+			this._hass.callService("activity_manager", "update_activity", {
+				entity_id: entityId,
+				last_completed: last_completed.value
+			}).then(() => {
+				// Close dialog
+				const dialog = this.shadowRoot.querySelector(".confirm-update");
+				if (dialog) dialog.close();
+				
+				// Update locally for immediate feedback
+				this._currentItem.last_completed = new Date(last_completed.value).toISOString();
+				if (this._currentItem.names && this._currentItem.names.length > 1) {
+					this._currentItem.current_name_index = 
+						(this._currentItem.current_name_index + 1) % this._currentItem.names.length;
+				}
+				
+				// Refresh data
+				this._fetchData();
+			}).catch(error => {
+				console.error("Error updating activity:", error);
+				this._showToast("Error updating activity. Please try again.");
+			});
+		});
+	}
+
+	_removeActivity() {
+		if (this._currentItem == null) return;
+
+		this._hass.callWS({
+			type: "activity_manager/remove",
+			item_id: this._currentItem["id"],
+		}).then(() => {
+			// Close the dialog immediately
+			const dialog = this.shadowRoot.querySelector(".confirm-remove");
+			if (dialog) dialog.close();
+			
+			// Clear the current item
+			this._currentItem = null;
+			
+			// The event subscription should handle the refresh
+			// but we'll add a fallback just in case
+			setTimeout(() => {
+				if (this._activities.find(item => item.id === this._currentItem?.id)) {
+					// If the item is still in the list after 500ms, force a refresh
+					this._fetchData();
+				}
+			}, 500);
+		}).catch(error => {
+			console.error("Error removing activity:", error);
+			this._showToast("Error removing activity. Please try again.");
+		});
+	}
+
+_addNameToActivity() {
+    if (this._currentItem == null) return;
+    
+    const newNameInput = this.shadowRoot.querySelector("#add-new-name");
+    if (!newNameInput.value.trim()) return;
+    
+    // Find the actual entity_id for this activity
+    this._getEntityIdForActivity(this._currentItem).then(entityId => {
+        if (!entityId) {
+            this._showToast("Could not find entity for this activity");
+            return;
         }
-    }
-
-    _removeActivity() {
-        if (this._currentItem == null) return;
-
-        this._hass.callWS({
-            type: "activity_manager/remove",
-            item_id: this._currentItem["id"],
-        }).then(() => {
-            // Manually remove the item from the local array
-            this._activities = this._activities.filter(
-                item => item.id !== this._currentItem["id"]
-            );
-            
-            // Force a UI update
-            this.requestUpdate();
-            
-            // Close the dialog
-            this.shadowRoot.querySelector(".confirm-remove").close();
-            
-            // Optional: Also refresh data from the server
-            this._fetchData();
-        }).catch(error => {
-            console.error("Error removing activity:", error);
-            this._showToast("Error removing activity. Please try again.");
-        });
-    }
-
-    _addNameToActivity() {
-        if (this._currentItem == null) return;
-        
-        const newNameInput = this.shadowRoot.querySelector("#add-new-name");
-        if (!newNameInput.value.trim()) return;
         
         // Update the item locally
         if (!this._currentItem.names) {
@@ -733,65 +745,79 @@ _adjustDialogSize(dialogElement) {
         this._currentItem.names.push(newNameInput.value.trim());
         
         // Call the service to add the name
-        try {
-            this._hass.callService("activity_manager", "add_name", {
-                entity_id: `sensor.${this._currentItem.category.toLowerCase()}_${this._currentItem.names[this._currentItem.current_name_index].toLowerCase().replace(/\s+/g, '_')}`,
-                name: newNameInput.value.trim()
-            });
-            
+        this._hass.callService("activity_manager", "add_name", {
+            entity_id: entityId,
+            name: newNameInput.value.trim()
+        }).then(() => {
             newNameInput.value = '';
-            
-            // Force UI update
             this.requestUpdate();
-            
-            // User feedback
             this._showToast("Name added successfully!");
-        } catch (error) {
+        }).catch(error => {
             console.error("Error adding name:", error);
-            // Rollback local change if service call fails
+            // Rollback local change
             this._currentItem.names.pop();
             this._showToast("Error adding name. Please try again.");
-        }
-    }
+        });
+    });
+}
 
-    _removeNameFromActivity(event, index) {
-        event.stopPropagation(); // Prevent dialog from closing
-        
-        if (this._currentItem == null) return;
-        if (!this._currentItem.names || this._currentItem.names.length <= 1) {
-            // Don't remove the last name
-            this._showToast("Cannot remove the last name!");
+_removeNameFromActivity(event, index) {
+    event.stopPropagation();
+    
+    if (this._currentItem == null) return;
+    if (!this._currentItem.names || this._currentItem.names.length <= 1) {
+        this._showToast("Cannot remove the last name!");
+        return;
+    }
+    
+    // Find the actual entity_id for this activity
+    this._getEntityIdForActivity(this._currentItem).then(entityId => {
+        if (!entityId) {
+            this._showToast("Could not find entity for this activity");
             return;
         }
         
-        try {
-            // Remove locally for immediate UI update
-            const nameToRemove = this._currentItem.names[index];
-            this._currentItem.names.splice(index, 1);
-            
-            // Update current_name_index if needed
-            if (index <= this._currentItem.current_name_index && this._currentItem.current_name_index > 0) {
-                this._currentItem.current_name_index--;
-            }
-            
-            // Call the service to remove the name
-            this._hass.callService("activity_manager", "remove_name", {
-                entity_id: `sensor.${this._currentItem.category.toLowerCase()}_${this._currentItem.names[this._currentItem.current_name_index].toLowerCase().replace(/\s+/g, '_')}`,
-                index: index
-            }).catch(error => {
-                console.error("Error removing name:", error);
-                // Rollback local change if service call fails
-                this._currentItem.names.splice(index, 0, nameToRemove);
-                this._showToast("Error removing name. Please try again.");
-            });
-            
+        // Store the name being removed for rollback
+        const nameToRemove = this._currentItem.names[index];
+        
+        // Remove locally for immediate UI update
+        this._currentItem.names.splice(index, 1);
+        
+        // Update current_name_index if needed
+        if (index <= this._currentItem.current_name_index && this._currentItem.current_name_index > 0) {
+            this._currentItem.current_name_index--;
+        } else if (index == this._currentItem.current_name_index && index == this._currentItem.names.length) {
+            this._currentItem.current_name_index = this._currentItem.names.length - 1;
+        }
+        
+        // Call the service to remove the name
+        this._hass.callService("activity_manager", "remove_name", {
+            entity_id: entityId,
+            index: index
+        }).then(() => {
             this.requestUpdate();
             this._showToast("Name removed!");
-        } catch (error) {
-            console.error("Error in remove name operation:", error);
-            this._showToast("An error occurred. Please try again.");
+        }).catch(error => {
+            console.error("Error removing name:", error);
+            // Rollback local change
+            this._currentItem.names.splice(index, 0, nameToRemove);
+            this._showToast("Error removing name. Please try again.");
+        });
+    });
+}
+
+// Helper method to find entity_id by activity id
+async _getEntityIdForActivity(activity) {
+    // Look through all entities to find the one with matching unique_id
+    for (const [entityId, entity] of Object.entries(this._hass.states)) {
+        if (entity.attributes && 
+            entity.attributes.integration === "activity_manager" &&
+            entity.attributes.id === activity.id) {
+            return entityId;
         }
     }
+    return null;
+}
 
     _showToast(message) {
         // Simple feedback implementation
@@ -815,69 +841,65 @@ _adjustDialogSize(dialogElement) {
         }, 3000);
     }
 
-    _fetchData = async () => {
-        try {
-            const items =
-                (await this._hass?.callWS({
-                    type: "activity_manager/items",
-                })) || [];
+	_fetchData = async () => {
+		try {
+			const items =
+				(await this._hass?.callWS({
+					type: "activity_manager/items",
+				})) || [];
 
-            // Check if there are changes before updating
-            const hasChanges = 
-                this._activities.length !== items.length ||
-                !this._activities.every(act => 
-                    items.some(item => item.id === act.id)
-                );
+			// Process the items
+			const processedActivities = items
+				.map((item) => {
+					const completed = new Date(item.last_completed);
+					const due = new Date(completed.valueOf() + item.frequency_ms);
+					const now = new Date();
+					const difference = due - now; // milliseconds
 
-            this._activities = items
-                .map((item) => {
-                    const completed = new Date(item.last_completed);
-                    const due = new Date(completed.valueOf() + item.frequency_ms);
-                    const now = new Date();
-                    const difference = due - now; // milliseconds
+					return {
+						...item,
+						// Handle both old and new data format
+						name: item.names && item.names.length > 0 ? 
+							item.names[item.current_name_index || 0] : 
+							item.name,
+						names: item.names || [item.name], // Ensure names array exists
+						current_name_index: item.current_name_index || 0,
+						due: due,
+						difference: difference,
+						time_unit: "day",
+					};
+				})
+				.filter((item) => {
+					if ("category" in this._config)
+						return (
+							item["category"] == this._config["category"] ||
+							item["category"] == "Activities"
+						);
+					return true;
+				})
+				.filter((item) => {
+					if (this._config.showDueOnly) return item["difference"] < 0;
+					return true;
+				})
+				.sort((a, b) => {
+					// Sort by due date (soonest first)
+					if (a.difference < 0 && b.difference >= 0) return -1;
+					if (a.difference >= 0 && b.difference < 0) return 1;
+					return a.difference - b.difference;
+				});
 
-                    return {
-                        ...item,
-                        // Handle both old and new data format
-                        name: item.names && item.names.length > 0 ? 
-                            item.names[item.current_name_index || 0] : 
-                            item.name,
-                        names: item.names || [item.name], // Ensure names array exists
-                        current_name_index: item.current_name_index || 0,
-                        due: due,
-                        difference: difference,
-                        time_unit: "day",
-                    };
-                })
-                .filter((item) => {
-                    if ("category" in this._config)
-                        return (
-                            item["category"] == this._config["category"] ||
-                            item["category"] == "Activities"
-                        );
-                    return true;
-                })
-                .filter((item) => {
-                    if (this._config.showDueOnly) return item["difference"] < 0;
-                    return true;
-                })
-                .sort((a, b) => {
-                    // Sort by due date (soonest first)
-                    if (a.difference < 0 && b.difference >= 0) return -1;
-                    if (a.difference >= 0 && b.difference < 0) return 1;
-                    return a.difference - b.difference;
-                });
+			// Always update the activities and request an update
+			this._activities = processedActivities;
+			this.requestUpdate();
+			
+		} catch (error) {
+			console.error("Error fetching activity data:", error);
+			// On error, set empty array to clear the display
+			this._activities = [];
+			this.requestUpdate();
+		}
+	};
 
-            // Force UI update if there were changes
-            if (hasChanges) {
-                this.requestUpdate();
-            }
-        } catch (error) {
-            console.error("Error fetching activity data:", error);
-        }
-    };
-
-    // CSS styles with updated dialog and button styling
 	static styles = css`
 		:host {
 			--am-item-primary-color: #ffffff;
@@ -922,6 +944,41 @@ _adjustDialogSize(dialogElement) {
 				--mdc-dialog-min-width: var(--dialog-mobile-width) !important;
 				--mdc-dialog-max-width: var(--dialog-mobile-width) !important;
 			}
+			
+			.duration-input {
+				flex-wrap: nowrap;
+				gap: 4px;
+			}
+			
+			.duration-input ha-textfield {
+				flex: 1;
+				min-width: 50px;
+				max-width: 65px;
+			}
+			
+			.form-item {
+				grid-template-columns: 1fr;
+			}
+			
+			.name-chips {
+				max-width: 100%;
+				overflow-x: auto;
+			}
+			
+			.last-completed-info {
+				font-size: 12px;
+				word-break: break-word;
+			}
+			
+			.name-chip {
+				font-size: 12px;
+				padding: 3px 6px 3px 8px;
+			}
+			
+			.remove-name-button {
+				--mdc-icon-button-size: 20px;
+				margin-left: 2px;
+			}
 		}
 		
 		/* Desktop styles (greater than 600px) */
@@ -944,10 +1001,10 @@ _adjustDialogSize(dialogElement) {
 		
 		/* Style for the inline Add button */
 		.inline-add-button {
-			background-color: var(--primary-color) !important;
+			background-color: var(--secondary-color) !important;
 			color: white !important;
 			border-radius: 18px !important;
-			--mdc-theme-primary: var(--primary-color) !important;
+			--mdc-theme-primary: var(--secondary-color) !important;
 			--mdc-button-raised: true !important;
 		}
 		
@@ -986,292 +1043,224 @@ _adjustDialogSize(dialogElement) {
 		mwc-button {
 			--mdc-button-raised: true !important;
 		}
-        
-        /* Override for specific dialogs */
-        .confirm-update,
-        .confirm-remove,
-        .manage-form {
-            width: 400px !important;
-            max-width: 400px !important;
-            --mdc-dialog-min-width: 400px !important;
-            --mdc-dialog-max-width: 400px !important;
-        }
-        
-        /* Button styling - specific colors for different buttons */
-        mwc-button[slot="primaryAction"] {
-            background-color: var(--primary-color) !important;
-            color: white !important;
-            border-radius: 18px !important;
-            --mdc-theme-primary: var(--primary-color) !important;
-        }
-        
-        mwc-button[slot="secondaryAction"] {
-            background-color: var(--secondary-color, #808080) !important;
-            color: white !important;
-            border-radius: 18px !important;
-            --mdc-theme-primary: var(--secondary-color, #808080) !important;
-        }
-        
-        /* Special button styles */
-        .add-button {
-            background-color: var(--info-color, #4a90e2) !important;
-            color: white !important;
-        }
-        
-        .update-button {
-            background-color: var(--primary-color) !important;
-            color: white !important;
-        }
-        
-        .remove-button {
-            background-color: var(--error-color, #ff5252) !important;
-            color: white !important;
-        }
-        
-        /* Force buttons to show raised style */
-        mwc-button {
-            --mdc-button-raised: true !important;
-        }
-        
-        /* All other styles remain the same */
-        .content {
-            padding: 0 12px 12px 12px;
-        }
-        .am-add-form {
-            padding-top: 10px;
-            display: grid;
-            align-items: center;
-            gap: 24px;
-        }
-        .am-add-button {
-            padding-top: 10px;
-        }
-        .duration-input {
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-        }
-        .header {
-            display: grid;
-            grid-template-columns: 52px auto min-content;
-            align-items: center;
-            padding: 12px;
-        }
-        .icon-container {
-            display: flex;
-            height: 40px;
-            width: 40px;
-            border-radius: 50%;
-            background: rgba(111, 111, 111, 0.2);
-            place-content: center;
-            align-items: center;
-            margin-right: 12px;
-        }
-        .info-container {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        .primary {
-            font-weight: bold;
-        }
-        .action-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-        .am-grid {
-            display: grid;
-            gap: 12px;
-        }
+		
+		/* All other styles */
+		.content {
+			padding: 0 12px 12px 12px;
+		}
+		
+		.am-add-form {
+			padding-top: 10px;
+			display: grid;
+			align-items: center;
+			gap: 24px;
+		}
+		
+		.am-add-button {
+			padding-top: 10px;
+		}
+		
+		.duration-input {
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			gap: 8px;
+		}
+		
+		.duration-input ha-textfield {
+			flex: 1;
+			min-width: 60px;
+			max-width: 80px;
+		}
+		
+		.header {
+			display: grid;
+			grid-template-columns: 52px auto min-content;
+			align-items: center;
+			padding: 12px;
+		}
+		
+		.icon-container {
+			display: flex;
+			height: 40px;
+			width: 40px;
+			border-radius: 50%;
+			background: rgba(111, 111, 111, 0.2);
+			place-content: center;
+			align-items: center;
+			margin-right: 12px;
+		}
+		
+		.info-container {
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+		}
+		
+		.primary {
+			font-weight: bold;
+		}
+		
+		.action-container {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			cursor: pointer;
+		}
+		
+		.am-grid {
+			display: grid;
+			gap: 12px;
+		}
 
-        .am-item {
-            position: relative;
-            display: inline-block;
-            display: flex;
-            #color: var(--am-item-primary-color, #ffffff);
-            #background-color: var(--am-item-background-color, #000000ff);
-            border-radius: 8px;
-            align-items: center;
-            padding: 12px;
-            cursor: pointer;
-        }
+		.am-item {
+			position: relative;
+			display: inline-block;
+			display: flex;
+			#color: var(--am-item-primary-color, #ffffff);
+			#background-color: var(--am-item-background-color, #000000ff);
+			border-radius: 8px;
+			align-items: center;
+			padding: 12px;
+			cursor: pointer;
+		}
 
-        .am-icon {
-            display: block;
-            border-radius: 50%;
-            background-color: #333;
-            padding: 5px;
-            margin-right: 12px;
-            --mdc-icon-size: 24px;
-        }
+		.am-icon {
+			display: block;
+			border-radius: 50%;
+			background-color: #333;
+			padding: 5px;
+			margin-right: 12px;
+			--mdc-icon-size: 24px;
+		}
 
-        .am-item-name {
-            flex: 1 1 auto;
-        }
+		.am-item-name {
+			flex: 1 1 auto;
+		}
 
-        .am-item-primary {
-            font-size: var(--am-item-primary-font-size, 14px);
-            font-weight: bold;
-        }
+		.am-item-primary {
+			font-size: var(--am-item-primary-font-size, 14px);
+			font-weight: bold;
+		}
 
-        .am-item-secondary {
-            font-size: var(--am-item-secondary-font-size, 12px);
-        }
+		.am-item-secondary {
+			font-size: var(--am-item-secondary-font-size, 12px);
+		}
 
-        .am-action {
-            display: grid;
-            grid-template-columns: auto auto;
-            align-items: center;
-        }
+		.am-action {
+			display: grid;
+			grid-template-columns: auto auto;
+			align-items: center;
+		}
 
-        .am-due-soon {
-            color: var(--am-item-due-soon-primary-color, #ffffff);
-            background-color: var(
-                --am-item-due-soon-background-color,
-                #00000020
-            );
-            --mdc-theme-primary: var(--am-item-due-soon-primary-color);
-        }
+		.am-due-soon {
+			color: var(--am-item-due-soon-primary-color, #ffffff);
+			background-color: var(
+				--am-item-due-soon-background-color,
+				#00000020
+			);
+			--mdc-theme-primary: var(--am-item-due-soon-primary-color);
+		}
 
-        .am-due {
-            color: var(--am-item-due-primary-color, #ffffff);
-            background-color: var(--am-item-due-background-color, #00000014);
-            --mdc-theme-primary: var(--am-item-due-primary-color);
-        }
+		.am-due {
+			color: var(--am-item-due-primary-color, #ffffff);
+			background-color: var(--am-item-due-background-color, #00000014);
+			--mdc-theme-primary: var(--am-item-due-primary-color);
+		}
 
-        .form-item {
-            display: grid;
-            grid-template-columns: 1fr 1.8fr;
-            align-items: center;
-            --mdc-shape-small: 0px;
-        }
+		.form-item {
+			display: grid;
+			grid-template-columns: 1fr 1.8fr;
+			align-items: center;
+			--mdc-shape-small: 0px;
+		}
 
-        .form-item input::-webkit-outer-spin-button,
-        .form-item input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-        }
+		.form-item input::-webkit-outer-spin-button,
+		.form-item input::-webkit-inner-spin-button {
+			-webkit-appearance: none;
+		}
 
-        .confirm-grid {
-            display: grid;
-            gap: 12px;
-            max-width: 100%;
-            overflow-y: auto;
-            max-height: 60vh;
-        }
-        
-        .last-completed-info {
-            margin-top: 8px;
-            font-size: 14px;
-            color: var(--secondary-text-color);
-        }
-        
-        .name-list-section {
-            margin-top: 16px;
-            border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
-            padding-top: 16px;
-        }
-        
-        .section-header {
-            font-weight: bold;
-            margin-bottom: 8px;
-        }
-        
-        .name-chips {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 12px;
-            max-width: 100%;
-            overflow-x: auto;
-        }
-		/* Style for the inline Add button */
-		.inline-add-button {
-			background-color: var(--secondary-color) !important;
-			color: white !important;
-			border-radius: 18px !important;
-			--mdc-theme-primary: var(--secondary-color) !important;
-			--mdc-button-raised: true !important;
-		}       
-        .name-chip {
-            display: flex;
-            align-items: center;
-            background-color: var(--secondary-background-color);
-            border-radius: 16px;
-            padding: 4px 8px 4px 12px;
-            font-size: 14px;
-        }
-        
-        .name-chip.active {
-            background-color: var(--primary-color);
-            color: var(--text-primary-color);
-        }
-        
-        .add-name-form {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-        
-        .remove-name-button {
-            --mdc-icon-button-size: 24px;
-            margin-left: 4px;
-        }
-        
-        ha-textfield {
-            width: 100% !important;
-            --mdc-text-field-fill-color: transparent;
-        }
-        
-        ha-textfield[type="datetime-local"] {
-            font-size: 13px;
-        }
-        
-        /* Catch-all to prevent content from expanding beyond dialog */
-        ha-dialog * {
-            max-width: 100%;
-            box-sizing: border-box;
-        }
-        
-        .confirm-grid div,
-        .last-completed-info,
-        .name-chips {
-            word-break: break-word;
-            overflow-wrap: break-word;
-        }
-        
-        @media (max-width: 400px) {
-            .duration-input {
-                flex-wrap: wrap;
-                gap: 8px;
-            }
-            
-            .form-item {
-                grid-template-columns: 1fr;
-            }
-            
-            .name-chips {
-                max-width: 100%;
-                overflow-x: auto;
-            }
-            
-            .last-completed-info {
-                font-size: 12px;
-                word-break: break-word;
-            }
-            
-            .name-chip {
-                font-size: 12px;
-                padding: 3px 6px 3px 8px;
-            }
-            
-            .remove-name-button {
-                --mdc-icon-button-size: 20px;
-                margin-left: 2px;
-            }
-        }
-    `;
+		.confirm-grid {
+			display: grid;
+			gap: 12px;
+			max-width: 100%;
+			overflow-y: auto;
+			max-height: 60vh;
+		}
+		
+		.last-completed-info {
+			margin-top: 8px;
+			font-size: 14px;
+			color: var(--secondary-text-color);
+		}
+		
+		.name-list-section {
+			margin-top: 16px;
+			border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+			padding-top: 16px;
+		}
+		
+		.section-header {
+			font-weight: bold;
+			margin-bottom: 8px;
+		}
+		
+		.name-chips {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin-bottom: 12px;
+			max-width: 100%;
+			overflow-x: auto;
+		}
+			   
+		.name-chip {
+			display: flex;
+			align-items: center;
+			background-color: var(--secondary-background-color);
+			border-radius: 16px;
+			padding: 4px 8px 4px 12px;
+			font-size: 14px;
+		}
+		
+		.name-chip.active {
+			background-color: var(--primary-color);
+			color: var(--text-primary-color);
+		}
+		
+		.add-name-form {
+			display: flex;
+			gap: 8px;
+			align-items: center;
+		}
+		
+		.remove-name-button {
+			--mdc-icon-button-size: 24px;
+			margin-left: 4px;
+		}
+		
+		ha-textfield {
+			width: 100% !important;
+			--mdc-text-field-fill-color: transparent;
+		}
+		
+		ha-textfield[type="datetime-local"] {
+			font-size: 13px;
+		}
+		
+		/* Catch-all to prevent content from expanding beyond dialog */
+		ha-dialog * {
+			max-width: 100%;
+			box-sizing: border-box;
+		}
+		
+		.confirm-grid div,
+		.last-completed-info,
+		.name-chips {
+			word-break: break-word;
+			overflow-wrap: break-word;
+		}
+	`;
 }
 
 class ActivityManagerCardEditor extends LitElement {
@@ -1288,31 +1277,41 @@ class ActivityManagerCardEditor extends LitElement {
         this._config = config;
     }
 
-    set hass(hass) {
-        this._hass = hass;
+	set hass(hass) {
+		this._hass = hass;
+		
+		if (!this._runOnce) {
+			// Update when loading
+			this._fetchData();
 
-        Object.keys(this._hass["states"]).forEach((key) => {
-            let entity = this._hass["states"][key];
-            if ("attributes" in entity) {
-                if ("integration" in entity.attributes) {
-                    if (entity.attributes.integration == "activity_manager") {
-                        if (
-                            !this._categories.some(
-                                (item) =>
-                                    item.label === entity.attributes.category
-                            )
-                        ) {
-                            this._categories.push({
-                                label: entity.attributes.category,
-                                value: entity.attributes.category,
-                            });
-                        }
-                    }
-                }
-            }
-        });
-    }
+			// Ensure we have a connection before subscribing
+			if (this._hass.connection) {
+				// Unsubscribe from any existing subscription
+				if (this._unsubscribe) {
+					this._unsubscribe();
+				}
+				
+				// Subscribe to updates
+				this._unsubscribe = this._hass.connection.subscribeEvents(
+					(event) => {
+						console.log("Activity manager event received:", event);
+						this._fetchData();
+					},
+					"activity_manager_updated"
+				);
+			}
 
+			this._runOnce = true;
+		}
+	}
+
+	disconnectedCallback() {
+		super.disconnectedCallback();
+		if (this._unsubscribe) {
+			this._unsubscribe();
+			this._unsubscribe = null;
+		}
+	}
     _valueChanged(ev) {
         if (!this._config || !this._hass) {
             return;
