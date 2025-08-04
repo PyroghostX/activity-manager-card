@@ -76,11 +76,17 @@ class ActivityManagerCard extends LitElement {
         (async () => await loadHaForm())();
     }
 
-    connectedCallback() {
-        super.connectedCallback();
-        // Apply button styling after connected
-        setTimeout(() => this._applyCustomButtonStyling(), 100);
-    }
+	connectedCallback() {
+		super.connectedCallback();
+		
+		// Detect if we're in a popup and add attribute
+		if (this.closest('.bubble-pop-up-container') || this.closest('ha-dialog')) {
+			this.setAttribute('in-popup', '');
+		}
+		
+		// Apply button styling after connected
+		setTimeout(() => this._applyCustomButtonStyling(), 100);
+	}
 
     set hass(hass) {
         this._hass = hass;
@@ -385,48 +391,65 @@ class ActivityManagerCard extends LitElement {
     }
 
     // New method to show any dialog consistently
-    _showDialog(dialogSelector, itemToSet = null) {
-        console.log(`Showing dialog: ${dialogSelector}`);
-        
-        // Set current item if provided
-        if (itemToSet !== null) {
-            this._currentItem = itemToSet;
-        }
-        
-        // Force immediate update to ensure dialog exists
-        this.requestUpdate();
-        
-        // Give the update a chance to render
-        setTimeout(() => {
-            try {
-                const dialog = this.shadowRoot.querySelector(dialogSelector);
-                console.log("Dialog element:", dialog);
-                
-                if (!dialog) {
-                    console.error(`Dialog element not found: ${dialogSelector}`);
-                    return;
-                }
-                
-                // Check if show method exists
-                if (typeof dialog.show !== 'function') {
-                    console.error("Dialog doesn't have show method, trying open");
-                    if (typeof dialog.open === 'function') {
-                        dialog.open();
-                    } else {
-                        // Fallback - set attribute directly
-                        dialog.setAttribute('open', 'true');
-                    }
-                } else {
-                    dialog.show();
-                }
-                
-                // Apply sizing after showing
-                this._adjustDialogSize(dialog);
-            } catch (error) {
-                console.error(`Error showing dialog ${dialogSelector}:`, error);
-            }
-        }, 100); // Longer timeout for more reliability
-    }
+	_showDialog(dialogSelector, itemToSet = null) {
+		console.log(`Showing dialog: ${dialogSelector}`);
+		
+		// Set current item if provided
+		if (itemToSet !== null) {
+			this._currentItem = itemToSet;
+		}
+		
+		// Force immediate update to ensure dialog exists
+		this.requestUpdate();
+		
+		// Give the update a chance to render
+		setTimeout(() => {
+			try {
+				const dialog = this.shadowRoot.querySelector(dialogSelector);
+				console.log("Dialog element:", dialog);
+				
+				if (!dialog) {
+					console.error(`Dialog element not found: ${dialogSelector}`);
+					return;
+				}
+				
+				// Check if we're in a nested popup
+				const inPopup = this.closest('.bubble-pop-up-container') || this.closest('ha-dialog');
+				if (inPopup) {
+					// For nested popups, ensure proper z-index stacking
+					dialog.style.zIndex = '999999';
+					dialog.style.position = 'fixed';
+				}
+				
+				// Check if show method exists
+				if (typeof dialog.show !== 'function') {
+					console.error("Dialog doesn't have show method, trying open");
+					if (typeof dialog.open === 'function') {
+						dialog.open();
+					} else {
+						// Fallback - set attribute directly
+						dialog.setAttribute('open', 'true');
+					}
+				} else {
+					dialog.show();
+				}
+				
+				// Apply sizing after showing
+				this._adjustDialogSize(dialog);
+				
+				// Ensure dialog is visible in viewport
+				setTimeout(() => {
+					const rect = dialog.getBoundingClientRect();
+					if (rect.right > window.innerWidth) {
+						dialog.style.left = `${window.innerWidth - rect.width - 20}px`;
+					}
+				}, 150);
+				
+			} catch (error) {
+				console.error(`Error showing dialog ${dialogSelector}:`, error);
+			}
+		}, 100);
+	}
 
     // Method to show the Add dialog
     _showAddDialog() {
@@ -448,7 +471,8 @@ class ActivityManagerCard extends LitElement {
 _adjustDialogSize(dialogElement) {
     if (!dialogElement) return;
     
-    // Check if we're on mobile (width less than or equal to 600px)
+    // Check if we're in a popup context
+    const inPopup = this.closest('.bubble-pop-up-container') || this.closest('ha-dialog');
     const isMobile = window.innerWidth <= 600;
     const dialogWidth = isMobile ? "300px" : "400px";
     
@@ -458,11 +482,28 @@ _adjustDialogSize(dialogElement) {
     dialogElement.style.width = dialogWidth;
     dialogElement.style.maxWidth = dialogWidth;
     
+    // Fix positioning for nested popups
+    if (inPopup) {
+        dialogElement.style.position = 'fixed';
+        dialogElement.style.zIndex = '999999';
+        
+        // Center the dialog properly
+        setTimeout(() => {
+            const rect = dialogElement.getBoundingClientRect();
+            const left = (window.innerWidth - rect.width) / 2;
+            dialogElement.style.left = `${left}px`;
+            dialogElement.style.right = 'auto';
+            dialogElement.style.marginLeft = '0';
+            dialogElement.style.transform = 'none';
+        }, 100);
+    }
+    
     // Find and style the content container
     const contentElement = dialogElement.querySelector('.mdc-dialog__content');
     if (contentElement) {
         contentElement.style.width = dialogWidth;
         contentElement.style.maxWidth = dialogWidth;
+        contentElement.style.overflow = 'visible';
     }
     
     setTimeout(() => {
@@ -474,26 +515,29 @@ _adjustDialogSize(dialogElement) {
                     surface.style.setProperty('min-width', dialogWidth, 'important');
                     surface.style.setProperty('max-width', dialogWidth, 'important');
                     surface.style.width = dialogWidth;
+                    surface.style.overflow = 'visible';
                 }
                 
                 const container = dialogElement.shadowRoot.querySelector('.mdc-dialog__container');
                 if (container) {
-                    container.style.maxWidth = dialogWidth;
+                    container.style.maxWidth = '100vw';
+                    container.style.paddingLeft = '0';
+                    container.style.paddingRight = '0';
                     
-                    // Only apply padding on desktop
-                    if (!isMobile) {
-                        console.log("Desktop detected, applying padding for centering");
-                        container.style.paddingLeft = "240px";
-                    } else {
-                        console.log("Mobile detected, removing padding for centering");
-                        container.style.paddingLeft = "0";
-                    }
-                    
-                    // Explicitly center the dialog
+                    // Center the dialog
                     container.style.display = 'flex';
                     container.style.justifyContent = 'center';
-                    container.style.marginLeft = 'auto';
-                    container.style.marginRight = 'auto';
+                    container.style.alignItems = 'center';
+                }
+                
+                // Fix scrim to cover entire viewport
+                const scrim = dialogElement.shadowRoot.querySelector('.mdc-dialog__scrim');
+                if (scrim && inPopup) {
+                    scrim.style.position = 'fixed';
+                    scrim.style.top = '0';
+                    scrim.style.left = '0';
+                    scrim.style.right = '0';
+                    scrim.style.bottom = '0';
                 }
             }
             
@@ -902,31 +946,65 @@ async _getEntityIdForActivity(activity) {
 
 	static styles = css`
 		:host {
-			--am-item-primary-color: #ffffff;
-			--am-item-background-color: #00000000;
-			--am-item-due-primary-color: #ff4a4a;
-			--am-item-due-background-color: #ff4a4a14;
-			--am-item-due-soon-primary-color: #ffffff;
-			--am-item-due-soon-background-color: #00000020;
-			--am-item-primary-font-size: 14px;
-			--am-item-secondary-font-size: 12px;
-			--mdc-theme-primary: var(--primary-text-color);
-			
-			/* Define custom button colors */
-			--am-primary-button-bg: var(--primary-color);
-			--am-primary-button-text: white;
-			--am-secondary-button-bg: var(--secondary-color, #808080);
-			--am-secondary-button-text: white;
-			
-			/* Responsive dialog width variables */
-			--dialog-desktop-width: 400px;
-			--dialog-mobile-width: 300px;
-		}
-		
-		/* Base dialog styling with media queries */
-		ha-dialog {
-			--dialog-content-padding: 16px !important;
-		}
+        --am-item-primary-color: #ffffff;
+        --am-item-background-color: #00000000;
+        --am-item-due-primary-color: #ff4a4a;
+        --am-item-due-background-color: #ff4a4a14;
+        --am-item-due-soon-primary-color: #ffffff;
+        --am-item-due-soon-background-color: #00000020;
+        --am-item-primary-font-size: 14px;
+        --am-item-secondary-font-size: 12px;
+        --mdc-theme-primary: var(--primary-text-color);
+        
+        /* Define custom button colors */
+        --am-primary-button-bg: var(--primary-color);
+        --am-primary-button-text: white;
+        --am-secondary-button-bg: var(--secondary-color, #808080);
+        --am-secondary-button-text: white;
+        
+        /* Responsive dialog width variables */
+        --dialog-desktop-width: 400px;
+        --dialog-mobile-width: 300px;
+        
+        /* Fix for nested popups */
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        overflow: visible !important;
+    }
+    
+    /* Fix for bubble-card popup context */
+    :host-context(.bubble-pop-up-container) {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    :host-context(.bubble-pop-up-container) ha-card {
+        overflow: visible !important;
+    }
+    
+    /* Base dialog styling with fixes for nested popups */
+    ha-dialog {
+        --dialog-content-padding: 16px !important;
+        position: fixed !important;
+        z-index: 999999 !important;
+    }
+    
+    /* Fix dialog positioning in nested contexts */
+    :host-context(.bubble-pop-up-container) ha-dialog::part(dialog) {
+        position: fixed !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        margin: 0 !important;
+    }
+    
+    /* Ensure dialogs don't get cut off */
+    .confirm-update,
+    .confirm-remove,
+    .manage-form {
+        max-height: 90vh !important;
+        overflow-y: auto !important;
+    }
 		
 		/* Mobile styles (up to 600px) */
 		@media (max-width: 600px) {
