@@ -982,6 +982,19 @@ async _getEntityIdForActivity(activity) {
     :host-context(.bubble-pop-up-container) ha-card {
         overflow: visible !important;
     }
+	
+	/* Keep dialog action buttons large and comfortable */
+	ha-dialog mwc-button {
+	  min-width: 60px !important;
+	  padding: 10px 16px !important;
+	  font-size: 14px !important;
+	  --mdc-button-height: 40px !important;
+	}
+
+	/* Space between buttons */
+	ha-dialog mwc-button + mwc-button {
+	  margin-left: 12px !important;
+	}
     
     /* Base dialog styling with fixes for nested popups */
     ha-dialog {
