@@ -477,10 +477,10 @@ _adjustDialogSize(dialogElement) {
     const dialogWidth = isMobile ? "300px" : "400px";
     
     // Set explicit inline styles to force width overrides
-    dialogElement.style.setProperty('--mdc-dialog-min-width', dialogWidth, 'important');
-    dialogElement.style.setProperty('--mdc-dialog-max-width', dialogWidth, 'important');
-    dialogElement.style.width = dialogWidth;
-    dialogElement.style.maxWidth = dialogWidth;
+    // dialogElement.style.setProperty('--mdc-dialog-min-width', dialogWidth, 'important');
+    // dialogElement.style.setProperty('--mdc-dialog-max-width', dialogWidth, 'important');
+    // dialogElement.style.width = dialogWidth;
+    // dialogElement.style.maxWidth = dialogWidth;
     
     // Fix positioning for nested popups
     if (inPopup) {
@@ -581,10 +581,10 @@ _adjustDialogSize(dialogElement) {
 			const allDialogs = this.shadowRoot.querySelectorAll('ha-dialog');
 			allDialogs.forEach(dialog => {
 				// Set dialog width based on screen size
-				dialog.style.setProperty('--mdc-dialog-min-width', dialogWidth, 'important');
-				dialog.style.setProperty('--mdc-dialog-max-width', dialogWidth, 'important');
-				dialog.style.width = dialogWidth;
-				dialog.style.maxWidth = dialogWidth;
+				// dialog.style.setProperty('--mdc-dialog-min-width', dialogWidth, 'important');
+				// dialog.style.setProperty('--mdc-dialog-max-width', dialogWidth, 'important');
+				// dialog.style.width = dialogWidth;
+				// dialog.style.maxWidth = dialogWidth;
 				
 				// Style buttons
 				const buttons = dialog.querySelectorAll('mwc-button');
@@ -1015,8 +1015,9 @@ async _getEntityIdForActivity(activity) {
     .confirm-update,
     .confirm-remove,
     .manage-form {
-        max-height: 90vh !important;
-        overflow-y: auto !important;
+			max-height: unset !important;   /* don’t force 90vh */
+			height: auto !important;        /* shrink to content */
+			overflow-y: visible !important; /* allow natural sizing */
     }
 		
 		/* Mobile styles (up to 600px) */
@@ -1344,6 +1345,39 @@ async _getEntityIdForActivity(activity) {
 			max-width: 100%;
 			box-sizing: border-box;
 		}
+		
+		ha-dialog,
+		.confirm-update,
+		.confirm-remove,
+		.manage-form {
+		  width: auto !important;
+		  max-width: 90vw !important;
+		  --mdc-dialog-min-width: 280px !important;
+		  --mdc-dialog-max-width: 400px !important;
+		}
+
+		@media (max-width: 600px) {
+		  ha-dialog,
+		  .confirm-update,
+		  .confirm-remove,
+		  .manage-form {
+			max-width: 90vw !important;
+		  }
+		}
+				
+		ha-dialog {
+		  --mdc-dialog-min-height: auto !important;
+		  --mdc-dialog-max-height: 80vh !important;
+		}
+
+		/* fallback: reset the actual MDC content */
+		ha-dialog .mdc-dialog__content {
+		  height: auto !important;
+		  max-height: none !important;
+		  flex: 0 0 auto !important;
+		}
+
+
 		
 		.confirm-grid div,
 		.last-completed-info,
