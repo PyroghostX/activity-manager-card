@@ -171,20 +171,13 @@ class ActivityManagerCard extends LitElement {
             <div class="am-action">
                 ${this._config.mode == "manage"
                     ? html`
-                          <mwc-icon-button
+                          <ha-icon-button
+                              .path=${"M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"}
                               @click=${(ev) =>
                                   this._showRemoveDialog(ev, activity)}
                               data-am-id=${activity.id}
                           >
-                              <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  viewBox="0 0 24 24"
-                              >
-                                  <path
-                                      d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"
-                                  />
-                              </svg>
-                          </mwc-icon-button>
+                          </ha-icon-button>
                       `
                     : ``}
             </div>
@@ -201,28 +194,16 @@ class ActivityManagerCard extends LitElement {
                     <div class="primary">${this._config.header}</div>
                 </div>
                 <div class="action-container">
-                    <mwc-icon-button
+                    <ha-icon-button
+                        .path=${"M14.3 21.7C13.6 21.9 12.8 22 12 22C6.5 22 2 17.5 2 12S6.5 2 12 2C13.3 2 14.6 2.3 15.8 2.7L14.2 4.3C13.5 4.1 12.8 4 12 4C7.6 4 4 7.6 4 12S7.6 20 12 20C12.4 20 12.9 20 13.3 19.9C13.5 20.6 13.9 21.2 14.3 21.7M7.9 10.1L6.5 11.5L11 16L21 6L19.6 4.6L11 13.2L7.9 10.1M18 14V17H15V19H18V22H20V19H23V17H20V14H18Z"}
                         @click=${() => this._showAddDialog()}
                     >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                d="M14.3 21.7C13.6 21.9 12.8 22 12 22C6.5 22 2 17.5 2 12S6.5 2 12 2C13.3 2 14.6 2.3 15.8 2.7L14.2 4.3C13.5 4.1 12.8 4 12 4C7.6 4 4 7.6 4 12S7.6 20 12 20C12.4 20 12.9 20 13.3 19.9C13.5 20.6 13.9 21.2 14.3 21.7M7.9 10.1L6.5 11.5L11 16L21 6L19.6 4.6L11 13.2L7.9 10.1M18 14V17H15V19H18V22H20V19H23V17H20V14H18Z"
-                            />
-                        </svg>
-                    </mwc-icon-button>
-                    <mwc-icon-button @click=${this._switchMode}>
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                d="M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z"
-                            />
-                        </svg>
-                    </mwc-icon-button>
+                    </ha-icon-button>
+                    <ha-icon-button
+                        .path=${"M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z"}
+                        @click=${this._switchMode}
+                    >
+                    </ha-icon-button>
                 </div>
             </div>
         `;
@@ -238,7 +219,7 @@ class ActivityManagerCard extends LitElement {
         let val = `${year}-${month}-${day}T${hours}:${minutes}`;
 
         return html`
-            <ha-dialog class="manage-form" heading="Add Activity for ${this._config["category"]}">
+            <ha-dialog class="manage-form" .headerTitle=${"Add Activity for " + this._config["category"]}>
                 <form>
                     <div class="am-add-form" >
                         <input
@@ -251,7 +232,7 @@ class ActivityManagerCard extends LitElement {
                             <ha-textfield type="text" id="name" placeholder="Names (separate with commas)" style="grid-column: 1 / span 2">
                             </ha-textfield>
                         </div>
-                        
+
                         <div class="form-item">
                             <label for="frequency-day">Frequency</label>
                             <div class="duration-input">
@@ -276,17 +257,14 @@ class ActivityManagerCard extends LitElement {
                     </div>
                     </ha-form>
                 </form>
-                <mwc-button 
-                    slot="primaryAction" 
-                    dialogAction="discard" 
-                    @click=${this._addActivity}
-                    class="add-button"
-                >
-                    Add
-                </mwc-button>
-                <mwc-button slot="secondaryAction" dialogAction="cancel">
-                    Cancel
-                </mwc-button>
+                <div slot="footer" class="dialog-actions">
+                    <ha-button appearance="filled" variant="neutral" @click=${() => this._closeDialog('.manage-form')}>
+                        Cancel
+                    </ha-button>
+                    <ha-button appearance="filled" variant="brand" @click=${this._addActivity} class="add-button">
+                        Add
+                    </ha-button>
+                </div>
             </ha-dialog>
         `;
     }
@@ -301,7 +279,7 @@ class ActivityManagerCard extends LitElement {
 		let val = `${year}-${month}-${day}T${hours}:${minutes}`;
 
 		return html`
-			<ha-dialog class="confirm-update" heading="Yay, you did it! 🎉">
+			<ha-dialog class="confirm-update" .headerTitle=${"Yay, you did it! 🎉"}>
 				<div class="confirm-grid">
 					<ha-textfield
 						type="datetime-local"
@@ -327,15 +305,13 @@ class ActivityManagerCard extends LitElement {
 									${this._currentItem.names.map((name, index) => html`
 										<div class="name-chip ${index === (this._currentItem.current_name_index || 0) ? 'active' : ''}">
 											${name}
-											<mwc-icon-button 
+											<ha-icon-button
 												class="remove-name-button"
+												.path=${"M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"}
 												@click=${(e) => this._removeNameFromActivity(e, index)}
 												?disabled=${this._currentItem.names.length <= 1}
 											>
-												<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18">
-													<path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
-												</svg>
-											</mwc-icon-button>
+											</ha-icon-button>
 										</div>
 									`)}
 								</div>
@@ -345,54 +321,66 @@ class ActivityManagerCard extends LitElement {
 										id="add-new-name"
 										placeholder="Add another name"
 									></ha-textfield>
-									<mwc-button @click=${this._addNameToActivity} class="inline-add-button">
+									<ha-button appearance="filled" variant="brand" @click=${this._addNameToActivity} class="inline-add-button">
 										Add
-									</mwc-button>
+									</ha-button>
 								</div>
 							` : ''
 						}
 					</div>
 				</div>
-				<mwc-button
-					slot="primaryAction"
-					dialogAction="discard"
-					@click=${this._updateActivity}
-					class="update-button"
-				>
-					Update
-				</mwc-button>
-				<mwc-button slot="secondaryAction" dialogAction="cancel">
-					Cancel
-				</mwc-button>
+				<div slot="footer" class="dialog-actions">
+					<ha-button appearance="filled" variant="neutral" @click=${() => this._closeDialog('.confirm-update')}>
+						Cancel
+					</ha-button>
+					<ha-button
+						appearance="filled"
+						variant="success"
+						@click=${this._updateActivity}
+						class="update-button"
+					>
+						Update
+					</ha-button>
+				</div>
 			</ha-dialog>
 		`;
 	}
 
     _renderRemoveDialog() {
         return html`
-            <ha-dialog class="confirm-remove" heading="Confirm">
+            <ha-dialog class="confirm-remove" .headerTitle=${"Confirm"}>
                 <div>
                     Remove
                     ${this._currentItem ? this._currentItem["name"] : ""}?
                 </div>
-                <mwc-button
-                    slot="primaryAction"
-                    dialogAction="discard"
-                    @click=${this._removeActivity}
-                    class="remove-button"
-                >
-                    Remove
-                </mwc-button>
-                <mwc-button slot="secondaryAction" dialogAction="cancel">
-                    Cancel
-                </mwc-button>
+                <div slot="footer" class="dialog-actions">
+                    <ha-button appearance="filled" variant="neutral" @click=${() => this._closeDialog('.confirm-remove')}>
+                        Cancel
+                    </ha-button>
+                    <ha-button
+                        appearance="filled"
+                        variant="danger"
+                        @click=${this._removeActivity}
+                        class="remove-button"
+                    >
+                        Remove
+                    </ha-button>
+                </div>
             </ha-dialog>
         `;
     }
 
+    _closeDialog(dialogSelector) {
+        const dialog = this.shadowRoot.querySelector(dialogSelector);
+        if (dialog) {
+            dialog.open = false;
+            dialog.close?.();
+        }
+    }
+
     // New method to show any dialog consistently
 	_showDialog(dialogSelector, itemToSet = null) {
-		console.log(`Showing dialog: ${dialogSelector}`);
+		// console.log(`Showing dialog: ${dialogSelector}`);
 		
 		// Set current item if provided
 		if (itemToSet !== null) {
@@ -406,7 +394,7 @@ class ActivityManagerCard extends LitElement {
 		setTimeout(() => {
 			try {
 				const dialog = this.shadowRoot.querySelector(dialogSelector);
-				console.log("Dialog element:", dialog);
+				// console.log("Dialog element:", dialog);
 				
 				if (!dialog) {
 					console.error(`Dialog element not found: ${dialogSelector}`);
@@ -421,18 +409,8 @@ class ActivityManagerCard extends LitElement {
 					dialog.style.position = 'fixed';
 				}
 				
-				// Check if show method exists
-				if (typeof dialog.show !== 'function') {
-					console.error("Dialog doesn't have show method, trying open");
-					if (typeof dialog.open === 'function') {
-						dialog.open();
-					} else {
-						// Fallback - set attribute directly
-						dialog.setAttribute('open', 'true');
-					}
-				} else {
-					dialog.show();
-				}
+				// Open the dialog via property (HA 2024.x+ uses .open property)
+				dialog.open = true;
 				
 				// Apply sizing after showing
 				this._adjustDialogSize(dialog);
@@ -541,29 +519,7 @@ _adjustDialogSize(dialogElement) {
                 }
             }
             
-            // Style buttons
-            const buttons = dialogElement.querySelectorAll('mwc-button');
-            buttons.forEach(button => {
-                button.setAttribute('raised', '');
-                
-                // Style based on button class
-                if (button.classList.contains('inline-add-button')) {
-                    button.style.setProperty('color', 'white', 'important');
-                    button.style.setProperty('background-color', 'var(--primary-color)', 'important');
-                } else {
-                    // Style based on slot
-                    const slot = button.getAttribute('slot');
-                    if (slot === 'primaryAction') {
-                        button.style.setProperty('color', 'white', 'important');
-                        button.style.setProperty('background-color', 'var(--primary-color)', 'important');
-                    } else if (slot === 'secondaryAction') {
-                        button.style.setProperty('color', 'white', 'important');
-                        button.style.setProperty('background-color', 'var(--secondary-color, #808080)', 'important');
-                    }
-                }
-                
-                button.style.borderRadius = '18px';
-            });
+            // Button styling is handled by ha-button variant attributes
             
         } catch (error) {
             console.error("Error adjusting dialog size:", error);
@@ -586,38 +542,7 @@ _adjustDialogSize(dialogElement) {
 				// dialog.style.width = dialogWidth;
 				// dialog.style.maxWidth = dialogWidth;
 				
-				// Style buttons
-				const buttons = dialog.querySelectorAll('mwc-button');
-				buttons.forEach(button => {
-					button.setAttribute('raised', '');
-					
-					// Style based on button class and slot
-					if (button.classList.contains('inline-add-button')) {
-						button.style.setProperty('color', 'white', 'important');
-						button.style.setProperty('background-color', 'var(--primary-color)', 'important');
-					} else if (button.classList.contains('add-button')) {
-						button.style.setProperty('color', 'white', 'important');
-						button.style.setProperty('background-color', 'var(--info-color, #4a90e2)', 'important');
-					} else if (button.classList.contains('update-button')) {
-						button.style.setProperty('color', 'white', 'important');
-						button.style.setProperty('background-color', 'var(--primary-color)', 'important');
-					} else if (button.classList.contains('remove-button')) {
-						button.style.setProperty('color', 'white', 'important');
-						button.style.setProperty('background-color', 'var(--error-color, #ff5252)', 'important');
-					} else {
-						// Default styling based on slot
-						const slot = button.getAttribute('slot');
-						if (slot === 'primaryAction') {
-							button.style.setProperty('color', 'white', 'important');
-							button.style.setProperty('background-color', 'var(--primary-color)', 'important');
-						} else if (slot === 'secondaryAction') {
-							button.style.setProperty('color', 'white', 'important');
-							button.style.setProperty('background-color', 'var(--secondary-color, #808080)', 'important');
-						}
-					}
-					
-					button.style.borderRadius = '18px';
-				});
+				// Button styling is handled by ha-button variant attributes
 			});
 		}, 100);
 	}
@@ -695,8 +620,7 @@ _adjustDialogSize(dialogElement) {
             if (icon) icon.value = "";
 
             // Close dialog
-            let manageEl = this.shadowRoot.querySelector(".manage-form");
-            if (manageEl) manageEl.close();
+            this._closeDialog('.manage-form');
         } catch (error) {
             console.error("Error adding activity:", error);
         }
@@ -719,9 +643,8 @@ _adjustDialogSize(dialogElement) {
 				last_completed: last_completed.value
 			}).then(() => {
 				// Close dialog
-				const dialog = this.shadowRoot.querySelector(".confirm-update");
-				if (dialog) dialog.close();
-				
+				this._closeDialog('.confirm-update');
+
 				// Update locally for immediate feedback
 				this._currentItem.last_completed = new Date(last_completed.value).toISOString();
 				if (this._currentItem.names && this._currentItem.names.length > 1) {
@@ -746,8 +669,7 @@ _adjustDialogSize(dialogElement) {
 			item_id: this._currentItem["id"],
 		}).then(() => {
 			// Close the dialog immediately
-			const dialog = this.shadowRoot.querySelector(".confirm-remove");
-			if (dialog) dialog.close();
+			this._closeDialog('.confirm-remove');
 			
 			// Clear the current item
 			this._currentItem = null;
@@ -984,16 +906,17 @@ async _getEntityIdForActivity(activity) {
     }
 	
 	/* Keep dialog action buttons large and comfortable */
-	ha-dialog mwc-button {
+	ha-dialog ha-button {
 	  min-width: 60px !important;
-	  padding: 10px 16px !important;
+	//   padding: 10px 16px !important;
 	  font-size: 14px !important;
-	  --mdc-button-height: 40px !important;
 	}
 
-	/* Space between buttons */
-	ha-dialog mwc-button + mwc-button {
-	  margin-left: 12px !important;
+	/* Dialog footer actions layout */
+	.dialog-actions {
+	  display: flex;
+	  justify-content: flex-end;
+	  gap: 12px;
 	}
     
     /* Base dialog styling with fixes for nested popups */
@@ -1089,51 +1012,6 @@ async _getEntityIdForActivity(activity) {
 				--mdc-dialog-min-width: var(--dialog-desktop-width) !important;
 				--mdc-dialog-max-width: var(--dialog-desktop-width) !important;
 			}
-		}
-		
-		/* Style for the inline Add button */
-		.inline-add-button {
-			background-color: var(--secondary-color) !important;
-			color: white !important;
-			border-radius: 18px !important;
-			--mdc-theme-primary: var(--secondary-color) !important;
-			--mdc-button-raised: true !important;
-		}
-		
-		/* Button styling - specific colors for different buttons */
-		mwc-button[slot="primaryAction"] {
-			background-color: var(--primary-color) !important;
-			color: white !important;
-			border-radius: 18px !important;
-			--mdc-theme-primary: var(--primary-color) !important;
-		}
-		
-		mwc-button[slot="secondaryAction"] {
-			background-color: var(--secondary-color, #808080) !important;
-			color: white !important;
-			border-radius: 18px !important;
-			--mdc-theme-primary: var(--secondary-color, #808080) !important;
-		}
-		
-		/* Special button styles */
-		.add-button {
-			background-color: var(--info-color, #4a90e2) !important;
-			color: white !important;
-		}
-		
-		.update-button {
-			background-color: var(--primary-color) !important;
-			color: white !important;
-		}
-		
-		.remove-button {
-			background-color: var(--error-color, #ff5252) !important;
-			color: white !important;
-		}
-		
-		/* Force buttons to show raised style */
-		mwc-button {
-			--mdc-button-raised: true !important;
 		}
 		
 		/* All other styles */
@@ -1404,30 +1282,28 @@ class ActivityManagerCardEditor extends LitElement {
 
 	set hass(hass) {
 		this._hass = hass;
-		
-		if (!this._runOnce) {
-			// Update when loading
-			this._fetchData();
 
-			// Ensure we have a connection before subscribing
-			if (this._hass.connection) {
-				// Unsubscribe from any existing subscription
-				if (this._unsubscribe) {
-					this._unsubscribe();
+		// Revert to original logic - populate categories directly
+		Object.keys(this._hass["states"]).forEach((key) => {
+			let entity = this._hass["states"][key];
+			if ("attributes" in entity) {
+				if ("integration" in entity.attributes) {
+					if (entity.attributes.integration == "activity_manager") {
+						if (
+							!this._categories.some(
+								(item) =>
+									item.label === entity.attributes.category
+							)
+						) {
+							this._categories.push({
+								label: entity.attributes.category,
+								value: entity.attributes.category,
+							});
+						}
+					}
 				}
-				
-				// Subscribe to updates
-				this._unsubscribe = this._hass.connection.subscribeEvents(
-					(event) => {
-						console.log("Activity manager event received:", event);
-						this._fetchData();
-					},
-					"activity_manager_updated"
-				);
 			}
-
-			this._runOnce = true;
-		}
+		});
 	}
 
 	disconnectedCallback() {
