@@ -219,7 +219,7 @@ class ActivityManagerCard extends LitElement {
         let val = `${year}-${month}-${day}T${hours}:${minutes}`;
 
         return html`
-            <ha-dialog class="manage-form" .headerTitle=${"Add Activity for " + this._config["category"]}>
+            <ha-dialog class="manage-form" .headerTitle=${"Add Activity for " + this._config["category"]} @closed=${this._onDialogClosed}>
                 <form>
                     <div class="am-add-form" >
                         <input
@@ -279,7 +279,7 @@ class ActivityManagerCard extends LitElement {
 		let val = `${year}-${month}-${day}T${hours}:${minutes}`;
 
 		return html`
-			<ha-dialog class="confirm-update" .headerTitle=${"Yay, you did it! 🎉"}>
+			<ha-dialog class="confirm-update" .headerTitle=${"Yay, you did it!! 🎉"} @closed=${this._onDialogClosed}>
 				<div class="confirm-grid">
 					<ha-textfield
 						type="datetime-local"
@@ -298,8 +298,24 @@ class ActivityManagerCard extends LitElement {
 					` : ''}
 					
 					<div class="name-list-section">
-						<div class="section-header">Task Names:</div>
-						${this._currentItem && this._currentItem.names ? 
+						<div class="section-header-row">
+							<div class="section-header">Task Names:</div>
+							${this._currentItem && this._currentItem.names ?
+								html`
+									<div class="add-name-form">
+										<ha-textfield
+											type="text"
+											id="add-new-name"
+											placeholder="Add another name"
+										></ha-textfield>
+										<ha-button appearance="filled" variant="brand" @click=${this._addNameToActivity} class="inline-add-button">
+											Add
+										</ha-button>
+									</div>
+								` : ''
+							}
+						</div>
+						${this._currentItem && this._currentItem.names ?
 							html`
 								<div class="name-chips">
 									${this._currentItem.names.map((name, index) => html`
@@ -315,21 +331,11 @@ class ActivityManagerCard extends LitElement {
 										</div>
 									`)}
 								</div>
-								<div class="add-name-form">
-									<ha-textfield
-										type="text"
-										id="add-new-name"
-										placeholder="Add another name"
-									></ha-textfield>
-									<ha-button appearance="filled" variant="brand" @click=${this._addNameToActivity} class="inline-add-button">
-										Add
-									</ha-button>
-								</div>
 							` : ''
 						}
 					</div>
 				</div>
-				<div slot="footer" class="dialog-actions">
+				<div class="dialog-actions update-dialog-actions">
 					<ha-button appearance="filled" variant="neutral" @click=${() => this._closeDialog('.confirm-update')}>
 						Cancel
 					</ha-button>
@@ -348,7 +354,7 @@ class ActivityManagerCard extends LitElement {
 
     _renderRemoveDialog() {
         return html`
-            <ha-dialog class="confirm-remove" .headerTitle=${"Confirm"}>
+            <ha-dialog class="confirm-remove" .headerTitle=${"Confirm"} @closed=${this._onDialogClosed}>
                 <div>
                     Remove
                     ${this._currentItem ? this._currentItem["name"] : ""}?
@@ -378,51 +384,72 @@ class ActivityManagerCard extends LitElement {
         }
     }
 
+    // Reset dialog state when it closes via any mechanism (scrim click,
+    // Escape key, programmatic close). Without this, the open property
+    // can desync after a scrim dismiss and subsequent show() calls no-op.
+    _onDialogClosed(ev) {
+        const dialog = ev.currentTarget;
+        if (dialog) {
+            dialog.open = false;
+        }
+    }
+
     // New method to show any dialog consistently
 	_showDialog(dialogSelector, itemToSet = null) {
-		// console.log(`Showing dialog: ${dialogSelector}`);
-		
 		// Set current item if provided
 		if (itemToSet !== null) {
 			this._currentItem = itemToSet;
 		}
-		
+
 		// Force immediate update to ensure dialog exists
 		this.requestUpdate();
-		
+
 		// Give the update a chance to render
 		setTimeout(() => {
 			try {
 				const dialog = this.shadowRoot.querySelector(dialogSelector);
-				// console.log("Dialog element:", dialog);
-				
+
 				if (!dialog) {
 					console.error(`Dialog element not found: ${dialogSelector}`);
 					return;
 				}
-				
+
 				// Check if we're in a nested popup
 				const inPopup = this.closest('.bubble-pop-up-container') || this.closest('ha-dialog');
 				if (inPopup) {
-					// For nested popups, ensure proper z-index stacking
 					dialog.style.zIndex = '999999';
 					dialog.style.position = 'fixed';
 				}
-				
-				// Open the dialog via property (HA 2024.x+ uses .open property)
-				dialog.open = true;
-				
-				// Apply sizing after showing
-				this._adjustDialogSize(dialog);
-				
-				// Ensure dialog is visible in viewport
-				setTimeout(() => {
-					const rect = dialog.getBoundingClientRect();
-					if (rect.right > window.innerWidth) {
-						dialog.style.left = `${window.innerWidth - rect.width - 20}px`;
+
+				// Force-reset state before reopening. mwc-dialog's `open`
+				// setter guards against same-value writes, so if the
+				// previous dismiss didn't fully sync state (e.g. scrim
+				// click), setting open=true again is a no-op. Toggle it
+				// off first, then call show() on the next frame.
+				if (dialog.open) {
+					dialog.open = false;
+					if (typeof dialog.close === 'function') {
+						try { dialog.close(); } catch (_) { /* ignore */ }
 					}
-				}, 150);
-				
+				}
+
+				requestAnimationFrame(() => {
+					if (typeof dialog.show === 'function') {
+						dialog.show();
+					} else {
+						dialog.open = true;
+					}
+
+					this._adjustDialogSize(dialog);
+
+					setTimeout(() => {
+						const rect = dialog.getBoundingClientRect();
+						if (rect.right > window.innerWidth) {
+							dialog.style.left = `${window.innerWidth - rect.width - 20}px`;
+						}
+					}, 150);
+				});
+
 			} catch (error) {
 				console.error(`Error showing dialog ${dialogSelector}:`, error);
 			}
@@ -629,35 +656,35 @@ _adjustDialogSize(dialogElement) {
 	_updateActivity() {
 		if (this._currentItem == null) return;
 
-		let last_completed = this.shadowRoot.querySelector("#update-last-completed");
+		const last_completed = this.shadowRoot.querySelector("#update-last-completed");
+		const itemId = this._currentItem["id"];
 
-		// Find the actual entity_id
-		this._getEntityIdForActivity(this._currentItem).then(entityId => {
-			if (!entityId) {
-				this._showToast("Could not find entity for this activity");
-				return;
+		// Use the websocket API directly with the activity UUID — this avoids
+		// the entity_id -> registry lookup in the service handler, which can
+		// silently no-op if the registry lookup misses.
+		this._hass.callWS({
+			type: "activity_manager/update",
+			item_id: itemId,
+			last_completed: last_completed.value,
+		}).then(() => {
+			// Close dialog
+			this._closeDialog('.confirm-update');
+
+			// Update locally for immediate feedback
+			const parsed = new Date(last_completed.value);
+			this._currentItem.last_completed = isNaN(parsed.getTime())
+				? new Date().toISOString()
+				: parsed.toISOString();
+			if (this._currentItem.names && this._currentItem.names.length > 1) {
+				this._currentItem.current_name_index =
+					(this._currentItem.current_name_index + 1) % this._currentItem.names.length;
 			}
-			
-			this._hass.callService("activity_manager", "update_activity", {
-				entity_id: entityId,
-				last_completed: last_completed.value
-			}).then(() => {
-				// Close dialog
-				this._closeDialog('.confirm-update');
 
-				// Update locally for immediate feedback
-				this._currentItem.last_completed = new Date(last_completed.value).toISOString();
-				if (this._currentItem.names && this._currentItem.names.length > 1) {
-					this._currentItem.current_name_index = 
-						(this._currentItem.current_name_index + 1) % this._currentItem.names.length;
-				}
-				
-				// Refresh data
-				this._fetchData();
-			}).catch(error => {
-				console.error("Error updating activity:", error);
-				this._showToast("Error updating activity. Please try again.");
-			});
+			// Refresh data
+			this._fetchData();
+		}).catch(error => {
+			console.error("Error updating activity:", error);
+			this._showToast("Error updating activity. Please try again.");
 		});
 	}
 
@@ -1174,6 +1201,29 @@ async _getEntityIdForActivity(activity) {
 			font-weight: bold;
 			margin-bottom: 8px;
 		}
+
+		.section-header-row {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			margin-bottom: 8px;
+			flex-wrap: wrap;
+		}
+
+		.section-header-row .section-header {
+			margin-bottom: 0;
+			flex: 0 0 auto;
+		}
+
+		.section-header-row .add-name-form {
+			flex: 1 1 160px;
+			min-width: 0;
+		}
+
+		.section-header-row .add-name-form ha-textfield {
+			flex: 1 1 auto;
+			min-width: 0;
+		}
 		
 		.name-chips {
 			display: flex;
@@ -1240,9 +1290,53 @@ async _getEntityIdForActivity(activity) {
 		  .confirm-remove,
 		  .manage-form {
 			max-width: 90vw !important;
+			--mdc-dialog-min-height: auto !important;
+			--mdc-dialog-max-height: 60vh !important;
+			--mdc-dialog-min-width: 280px !important;
 		  }
+
+		  .confirm-update .confirm-grid {
+			max-height: 40vh;
+		  }
+
 		}
-				
+
+		/* The update dialog's actions live as a sibling of the
+		   scrollable confirm-grid so they always render below it as
+		   their own section, separated by a divider. Cancel and
+		   Update sit next to each other on the right, oversized
+		   for easy mobile tapping. */
+		.update-dialog-actions {
+			display: flex;
+			flex-direction: row;
+			justify-content: flex-end;
+			align-items: center;
+			gap: 12px;
+			margin-top: 16px;
+			padding-top: 16px;
+			border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+			height: 80px;
+		}
+
+		/* Make the action buttons large for easier tapping.
+		   ha-button is webawesome-based — its inner control reads
+		   --ha-button-height (which feeds --wa-form-control-height).
+		   Setting height/min-height on the host alone leaves the
+		   internal <button class="button"> stuck at the default 40px,
+		   so we also override via ::part(base). */
+		.update-dialog-actions ha-button {
+			flex: 0 0 auto;
+			width: 150px;
+			--ha-button-height: 60px;
+			font-size: 16px !important;
+		}
+
+		.update-dialog-actions ha-button::part(base) {
+			height: 60px;
+			min-height: 60px;
+			font-size: 16px;
+		}
+
 		ha-dialog {
 		  --mdc-dialog-min-height: auto !important;
 		  --mdc-dialog-max-height: 80vh !important;
