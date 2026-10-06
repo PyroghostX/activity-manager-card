@@ -86,6 +86,22 @@ class ActivityManagerCard extends LitElement {
 		
 		// Apply button styling after connected
 		setTimeout(() => this._applyCustomButtonStyling(), 100);
+
+		// Re-attached after a view change: catch up and listen again
+		if (this._hass && !this._unsubscribe) {
+			this._fetchData();
+			this._subscribe();
+		}
+	}
+
+	disconnectedCallback() {
+		super.disconnectedCallback();
+		if (this._unsubscribe) {
+			this._unsubscribe
+				.then((unsub) => unsub && unsub())
+				.catch(() => {});
+			this._unsubscribe = null;
+		}
 	}
 
     set hass(hass) {
@@ -95,13 +111,29 @@ class ActivityManagerCard extends LitElement {
             this._fetchData();
 
             // Update when changes are made
-            this._hass.connection.subscribeEvents(
-                () => this._fetchData(),
-                "activity_manager_updated"
-            );
+            this._subscribe();
 
             this._runOnce = true;
         }
+    }
+
+    _subscribe() {
+        if (this._unsubscribe || !this._hass) return;
+        const refresh = () => this._fetchData();
+        // activity_manager/subscribe works for every user. Home Assistant only
+        // lets admins subscribe to the raw event, so it is just the fallback
+        // for an older integration without the command.
+        this._unsubscribe = this._hass.connection
+            .subscribeMessage(refresh, { type: "activity_manager/subscribe" })
+            .catch(() =>
+                this._hass.user?.is_admin
+                    ? this._hass.connection.subscribeEvents(
+                          refresh,
+                          "activity_manager_updated"
+                      )
+                    : null
+            )
+            .catch(() => null);
     }
 
     _ifDue(activity, due, dueSoon) {
