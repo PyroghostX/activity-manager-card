@@ -251,8 +251,7 @@ class ActivityManagerCard extends LitElement {
 
                         <div class="form-item">
                             <label for="last-completed">Last Completed</label>
-                            <ha-textfield type="datetime-local" id="last-completed" value=${val}>
-                            </ha-textfield>
+                            <input type="datetime-local" id="last-completed" class="native-datetime" .value=${val} />
                         </div>
                     </div>
                     </ha-form>
@@ -281,13 +280,14 @@ class ActivityManagerCard extends LitElement {
 		return html`
 			<ha-dialog class="confirm-update" .headerTitle=${"Yay, you did it!! 🎉"} @closed=${this._onDialogClosed}>
 				<div class="confirm-grid">
-					<ha-textfield
-						type="datetime-local"
-						id="update-last-completed"
-						label="Date you completed it:"
-						value=${val}
-					>
-					</ha-textfield>
+					<div class="completed-date-field">
+						<label for="update-last-completed">Date you completed it:</label>
+						<input
+							type="datetime-local"
+							id="update-last-completed"
+							.value=${val}
+						/>
+					</div>
 					${this._currentItem ? html`
 						<div class="last-completed-info">
 							Last completed: ${new Date(this._currentItem.last_completed).toLocaleString()}
@@ -1190,6 +1190,39 @@ async _getEntityIdForActivity(activity) {
 			font-size: 14px;
 			color: var(--secondary-text-color);
 		}
+
+		.completed-date-field {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+		}
+
+		.completed-date-field label {
+			font-size: 14px;
+			color: var(--secondary-text-color);
+		}
+
+		.completed-date-field input[type="datetime-local"],
+		input.native-datetime[type="datetime-local"] {
+			width: 100%;
+			box-sizing: border-box;
+			padding: 10px 12px;
+			font-size: 14px;
+			font-family: inherit;
+			color: var(--primary-text-color);
+			background-color: var(--secondary-background-color, rgba(127, 127, 127, 0.1));
+			border: 1px solid var(--divider-color, rgba(127, 127, 127, 0.4));
+			border-radius: 8px;
+			/* Let the browser paint the calendar/clock picker icon for the
+			   current theme so it stays visible in dark mode. */
+			color-scheme: light dark;
+		}
+
+		.completed-date-field input[type="datetime-local"]:focus,
+		input.native-datetime[type="datetime-local"]:focus {
+			outline: none;
+			border-color: var(--primary-color);
+		}
 		
 		.name-list-section {
 			margin-top: 16px;
@@ -1291,12 +1324,12 @@ async _getEntityIdForActivity(activity) {
 		  .manage-form {
 			max-width: 90vw !important;
 			--mdc-dialog-min-height: auto !important;
-			--mdc-dialog-max-height: 60vh !important;
+			--mdc-dialog-max-height: 85vh !important;
 			--mdc-dialog-min-width: 280px !important;
 		  }
 
 		  .confirm-update .confirm-grid {
-			max-height: 40vh;
+			max-height: 65vh;
 		  }
 
 		}
