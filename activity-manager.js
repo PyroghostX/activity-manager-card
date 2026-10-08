@@ -359,33 +359,61 @@ class ActivityManagerCard extends LitElement {
 
                         <div class="form-item">
                             <label for="am-form-category">Category</label>
-                            <ha-textfield
+                            <input
+                                type="text"
                                 id="am-form-category"
+                                class="am-input"
                                 .value=${f.category}
                                 @input=${(ev) => (f.category = ev.target.value)}
-                            ></ha-textfield>
+                            />
                         </div>
 
                         <div class="form-item">
                             <label>How often</label>
                             <div class="duration-input">
-                                <ha-textfield type="number" inputmode="numeric" no-spinner label="days"
-                                    .value=${String(f.days)} @input=${(ev) => (f.days = ev.target.value)}></ha-textfield>
-                                <ha-textfield type="number" inputmode="numeric" no-spinner label="hours"
-                                    .value=${String(f.hours)} @input=${(ev) => (f.hours = ev.target.value)}></ha-textfield>
-                                <ha-textfield type="number" inputmode="numeric" no-spinner label="min"
-                                    .value=${String(f.minutes)} @input=${(ev) => (f.minutes = ev.target.value)}></ha-textfield>
+                                <label class="am-unit">
+                                    <input class="am-input" type="number" inputmode="numeric" min="0"
+                                        .value=${String(f.days)} @input=${(ev) => (f.days = ev.target.value)} />
+                                    <span>days</span>
+                                </label>
+                                <label class="am-unit">
+                                    <input class="am-input" type="number" inputmode="numeric" min="0"
+                                        .value=${String(f.hours)} @input=${(ev) => (f.hours = ev.target.value)} />
+                                    <span>hours</span>
+                                </label>
+                                <label class="am-unit">
+                                    <input class="am-input" type="number" inputmode="numeric" min="0"
+                                        .value=${String(f.minutes)} @input=${(ev) => (f.minutes = ev.target.value)} />
+                                    <span>min</span>
+                                </label>
                             </div>
                         </div>
 
                         <div class="form-item">
                             <label for="am-form-icon">Icon</label>
-                            <ha-icon-picker
-                                id="am-form-icon"
-                                .hass=${this._hass}
-                                .value=${f.icon}
-                                @value-changed=${(ev) => (f.icon = ev.detail.value || "")}
-                            ></ha-icon-picker>
+                            ${customElements.get("ha-icon-picker") ? html`
+                                <ha-icon-picker
+                                    id="am-form-icon"
+                                    .hass=${this._hass}
+                                    .value=${f.icon}
+                                    @value-changed=${(ev) => (f.icon = ev.detail.value || "")}
+                                ></ha-icon-picker>
+                            ` : html`
+                                <div class="am-icon-row">
+                                    <ha-icon .icon=${f.icon || "mdi:help-circle-outline"}></ha-icon>
+                                    <input
+                                        type="text"
+                                        id="am-form-icon"
+                                        class="am-input"
+                                        placeholder="mdi:broom"
+                                        autocapitalize="off"
+                                        spellcheck="false"
+                                        .value=${f.icon}
+                                        @input=${(ev) => (f.icon = ev.target.value.trim())}
+                                        @change=${() => this.requestUpdate()}
+                                    />
+                                </div>
+                            `}
                         </div>
 
                         <div class="form-item">
@@ -432,11 +460,13 @@ class ActivityManagerCard extends LitElement {
                 </div>
                 ${f.names.map((name, index) => html`
                     <div class="name-row">
-                        <ha-textfield
+                        <input
+                            type="text"
+                            class="am-input"
                             .value=${name}
                             placeholder=${index === 0 ? "Task name" : "Another name"}
                             @input=${(ev) => (f.names[index] = ev.target.value)}
-                        ></ha-textfield>
+                        />
                         ${index === next ? html`<span class="name-next">next</span>` : ""}
                         <ha-icon-button
                             class="remove-name-button"
@@ -503,13 +533,15 @@ class ActivityManagerCard extends LitElement {
                         <div class="field-label">If not done, give it to everyone after</div>
                         <div class="escalate-row">
                             ${f.escUnit !== "never" ? html`
-                                <ha-textfield
+                                <input
                                     type="number"
+                                    class="am-input"
                                     inputmode="decimal"
-                                    no-spinner
+                                    min="0"
+                                    step="any"
                                     .value=${String(f.escValue)}
                                     @input=${(ev) => (f.escValue = ev.target.value)}
-                                ></ha-textfield>
+                                />
                             ` : ""}
                             <div class="chip-row">
                                 ${[["hours", "hours"], ["days", "days"], ["never", "Never"]].map(([unit, label]) =>
@@ -662,11 +694,12 @@ class ActivityManagerCard extends LitElement {
 							${this._currentItem && this._currentItem.names ?
 								html`
 									<div class="add-name-form">
-										<ha-textfield
+										<input
 											type="text"
+											class="am-input"
 											id="add-new-name"
 											placeholder="Add another name"
-										></ha-textfield>
+										/>
 										<ha-button appearance="filled" variant="brand" @click=${this._addNameToActivity} class="inline-add-button">
 											Add
 										</ha-button>
@@ -1620,10 +1653,9 @@ async _getEntityIdForActivity(activity) {
 				gap: 4px;
 			}
 			
-			.duration-input ha-textfield {
-				flex: 1;
+			.duration-input .am-unit {
 				min-width: 50px;
-				max-width: 65px;
+				max-width: 72px;
 			}
 			
 			.form-item {
@@ -1692,10 +1724,15 @@ async _getEntityIdForActivity(activity) {
 			gap: 8px;
 		}
 		
-		.duration-input ha-textfield {
+		.duration-input .am-unit {
 			flex: 1;
 			min-width: 60px;
 			max-width: 80px;
+			display: grid;
+			gap: 2px;
+			text-align: center;
+			font-size: 12px;
+			color: var(--secondary-text-color);
 		}
 		
 		.header {
@@ -1881,7 +1918,7 @@ async _getEntityIdForActivity(activity) {
 			min-width: 0;
 		}
 
-		.section-header-row .add-name-form ha-textfield {
+		.section-header-row .add-name-form .am-input {
 			flex: 1 1 auto;
 			min-width: 0;
 		}
@@ -1920,13 +1957,52 @@ async _getEntityIdForActivity(activity) {
 			margin-left: 4px;
 		}
 		
-		ha-textfield {
-			width: 100% !important;
-			--mdc-text-field-fill-color: transparent;
+		/* Plain inputs: HA's own text field elements change between releases
+		   (ha-textfield is gone since 2026.9) */
+		.am-input {
+			width: 100%;
+			box-sizing: border-box;
+			min-height: 44px;
+			padding: 10px 12px;
+			/* 16px keeps iOS from zooming in on focus */
+			font-size: 16px;
+			font-family: inherit;
+			color: var(--primary-text-color);
+			background-color: var(--secondary-background-color, rgba(127, 127, 127, 0.1));
+			border: 1px solid var(--divider-color, rgba(127, 127, 127, 0.4));
+			border-radius: 8px;
+			color-scheme: light dark;
 		}
-		
-		ha-textfield[type="datetime-local"] {
-			font-size: 13px;
+
+		.am-input:focus {
+			outline: none;
+			border-color: var(--primary-color);
+		}
+
+		.am-input::placeholder {
+			color: var(--secondary-text-color);
+			opacity: 0.7;
+		}
+
+		.am-input[type="number"] {
+			-moz-appearance: textfield;
+			text-align: center;
+		}
+
+		.am-input::-webkit-outer-spin-button,
+		.am-input::-webkit-inner-spin-button {
+			-webkit-appearance: none;
+			margin: 0;
+		}
+
+		.am-icon-row {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.am-icon-row ha-icon {
+			flex: none;
 		}
 		
 		/* Catch-all to prevent content from expanding beyond dialog */
@@ -2060,12 +2136,14 @@ async _getEntityIdForActivity(activity) {
 			gap: 4px;
 		}
 
-		.name-row ha-textfield {
+		.name-row .am-input {
 			flex: 1 1 auto;
 			min-width: 0;
 		}
 
 		.name-next {
+			flex: none;
+			white-space: nowrap;
 			font-size: 12px;
 			color: var(--primary-color);
 		}
@@ -2114,8 +2192,8 @@ async _getEntityIdForActivity(activity) {
 			gap: 8px;
 		}
 
-		.escalate-row ha-textfield {
-			width: 90px !important;
+		.escalate-row .am-input {
+			width: 90px;
 			flex: 0 0 90px;
 		}
 
