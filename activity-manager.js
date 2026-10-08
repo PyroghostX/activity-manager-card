@@ -891,8 +891,9 @@ class ActivityManagerCard extends LitElement {
     // Updated method to show update dialog
     _showUpdateDialog(item) {
         this._doneAt = utils._toLocalInput(new Date());
-        // The logged-in user's person, else whoever's turn it is
-        this._doneBy = this._myPerson() || item.turn || null;
+        // Whoever's turn it is, else the logged-in user's person. Pick
+        // another chip when someone covered for them.
+        this._doneBy = item.turn || this._myPerson() || null;
         this._showDialog(".confirm-update", item);
     }
 
