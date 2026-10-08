@@ -35,12 +35,43 @@ export const utils = {
         const num = parseInt(value, 10);
         return isNaN(num) ? defaultValue : num;
     },
+
+    // Date -> value for <input type="datetime-local"> (local time)
+    _toLocalInput: (date) => {
+        if (!(date instanceof Date) || isNaN(date.getTime())) date = new Date();
+        const pad = (n) => n.toString().padStart(2, "0");
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    },
+
+    // datetime-local value -> ISO with time zone, null if empty/invalid
+    _localToIso: (value) => {
+        const parsed = new Date(value);
+        return value && !isNaN(parsed.getTime()) ? parsed.toISOString() : null;
+    },
 };
+
+const CLOSE_PATH =
+    "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z";
+
+const ROTATION_OPTIONS = [
+    ["alternate", "Take turns"],
+    ["fixed", "Always the same person"],
+    ["anyone", "Anyone"],
+];
 
 class ActivityManagerCard extends LitElement {
     _currentItem = null;
     _activities = [];
 	_unsubscribe = null;
+    // true once the integration answers activity_manager/history (edit,
+    // history and sharing); false for an older integration
+    _features = null;
+    _featureProbe = null;
+    _form = null; // values of the open Add/Edit form
+    _history = [];
+    _historyLoading = false;
+    _doneBy = null; // person picked in the completion dialog
+    _doneAt = ""; // datetime-local value in the completion dialog
 
     static getConfigElement() {
         return document.createElement("activity-manager-card-editor");
@@ -136,6 +167,73 @@ class ActivityManagerCard extends LitElement {
             .catch(() => null);
     }
 
+    // Edit, history and sharing need a newer integration. An older one
+    // answers unknown_command, and the card then works as before.
+    _probeFeatures() {
+        if (this._featureProbe || !this._hass) return;
+        this._featureProbe = this._hass
+            .callWS({ type: "activity_manager/history", limit: 1 })
+            .then(() => true)
+            .catch((err) => {
+                // Ask again on the next refresh unless the command is missing
+                if (err?.code !== "unknown_command") this._featureProbe = null;
+                return false;
+            })
+            .then((ok) => {
+                this._features = ok;
+                this.requestUpdate();
+            });
+    }
+
+    // --- People ---------------------------------------------------------
+
+    _persons() {
+        if (!this._hass) return [];
+        return Object.values(this._hass.states)
+            .filter((state) => state.entity_id.startsWith("person."))
+            .map((state) => ({
+                id: state.entity_id,
+                name: state.attributes.friendly_name || state.entity_id.slice(7),
+                userId: state.attributes.user_id,
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    _personName(id) {
+        if (!id || typeof id !== "string") return "";
+        const state = this._hass?.states[id];
+        return state?.attributes.friendly_name || id.replace(/^person\./, "");
+    }
+
+    // The logged-in user's person; kiosk users have none
+    _myPerson() {
+        const userId = this._hass?.user?.id;
+        if (!userId) return null;
+        return this._persons().find((p) => p.userId === userId)?.id || null;
+    }
+
+    // "Sam's turn", or "Both"/"Everyone" when escalated or anyone
+    _turnLabel(activity) {
+        const assigned = activity.assigned_to || [];
+        if (!activity.assignees || !activity.assignees.length || !assigned.length) return "";
+        if (assigned.length > 1) return assigned.length === 2 ? "Both" : "Everyone";
+        return `${this._personName(assigned[0])}'s turn`;
+    }
+
+    // Shared tasks follow the card's person; everything else its category
+    _isVisible(item) {
+        const shared = Array.isArray(item.assignees) && item.assignees.length > 0;
+        if (shared && this._config.person) {
+            return (item.assigned_to || []).includes(this._config.person);
+        }
+        if ("category" in this._config)
+            return (
+                item["category"] == this._config["category"] ||
+                item["category"] == "Activities"
+            );
+        return true;
+    }
+
     _ifDue(activity, due, dueSoon) {
         if (activity.difference < 0) return due;
         if (activity.difference < this._config.soonHours * 60 * 60 * 1000)
@@ -161,7 +259,8 @@ class ActivityManagerCard extends LitElement {
                                         activity,
                                         "am-due",
                                         "am-due-soon"
-                                    )}"
+                                    )}
+                                    ${activity.escalated ? "am-escalated" : ""}"
                                 >
                                     <div class="am-icon">
                                         <ha-icon
@@ -179,6 +278,9 @@ class ActivityManagerCard extends LitElement {
                                         </div>
                                         <div class="am-item-secondary">
                                             ${utils._formatTimeAgo(activity.due)} - Last done: ${new Date(activity.last_completed).toLocaleDateString(undefined, {month: 'numeric', day: 'numeric'})}
+                                            ${this._turnLabel(activity)
+                                                ? html` · <span class="am-turn">${this._turnLabel(activity)}</span>`
+                                                : ""}
                                         </div>
                                     </span>
                                     ${this._renderActionButton(activity)}
@@ -188,7 +290,7 @@ class ActivityManagerCard extends LitElement {
                     </div>
                 </div>
             </ha-card>
-            ${this._renderAddDialog()} ${this._renderUpdateDialog()}
+            ${this._renderFormDialog()} ${this._renderUpdateDialog()}
             ${this._renderRemoveDialog()}
         `;
         
@@ -241,94 +343,319 @@ class ActivityManagerCard extends LitElement {
         `;
     }
 
-    _renderAddDialog() {
-        const date = new Date();
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, "0");
-        const day = date.getDate().toString().padStart(2, "0");
-        const hours = date.getHours().toString().padStart(2, "0");
-        const minutes = date.getMinutes().toString().padStart(2, "0");
-        let val = `${year}-${month}-${day}T${hours}:${minutes}`;
+    // One form for Add and Edit; its values live in this._form
+    _renderFormDialog() {
+        const f = this._form;
+        const title =
+            f?.mode === "edit"
+                ? "Edit task"
+                : "Add task" + (this._config["category"] ? " for " + this._config["category"] : "");
 
         return html`
-            <ha-dialog class="manage-form" .headerTitle=${"Add Activity for " + this._config["category"]} @closed=${this._onDialogClosed}>
-                <form>
-                    <div class="am-add-form" >
-                        <input
-                            type="hidden"
-                            id="category"
-                            placeholder="Category"
-                            value="${this._config["category"]}" />
+            <ha-dialog class="manage-form" .headerTitle=${title} @closed=${this._onDialogClosed}>
+                ${f ? html`
+                    <div class="confirm-grid form-grid">
+                        ${this._renderNamesField(f)}
 
                         <div class="form-item">
-                            <ha-textfield type="text" id="name" placeholder="Names (separate with commas)" style="grid-column: 1 / span 2">
-                            </ha-textfield>
+                            <label for="am-form-category">Category</label>
+                            <ha-textfield
+                                id="am-form-category"
+                                .value=${f.category}
+                                @input=${(ev) => (f.category = ev.target.value)}
+                            ></ha-textfield>
                         </div>
 
                         <div class="form-item">
-                            <label for="frequency-day">Frequency</label>
+                            <label>How often</label>
                             <div class="duration-input">
-                                <ha-textfield type="number" inputmode="numeric" no-spinner label="dd" id="frequency-day" value="0"></ha-textfield>
-                                <ha-textfield type="number" inputmode="numeric" no-spinner label="hh" id="frequency-hour" value="0"></ha-textfield>
-                                <ha-textfield type="number" inputmode="numeric" no-spinner label="mm" id="frequency-minute" value="0"></ha-textfield>
-                                <ha-textfield type="number" inputmode="numeric" no-spinner label="ss"id="frequency-second" value="0"></ha-textfield>
+                                <ha-textfield type="number" inputmode="numeric" no-spinner label="days"
+                                    .value=${String(f.days)} @input=${(ev) => (f.days = ev.target.value)}></ha-textfield>
+                                <ha-textfield type="number" inputmode="numeric" no-spinner label="hours"
+                                    .value=${String(f.hours)} @input=${(ev) => (f.hours = ev.target.value)}></ha-textfield>
+                                <ha-textfield type="number" inputmode="numeric" no-spinner label="min"
+                                    .value=${String(f.minutes)} @input=${(ev) => (f.minutes = ev.target.value)}></ha-textfield>
                             </div>
                         </div>
 
                         <div class="form-item">
-                            <label for="icon">Icon</label>
-                            <ha-icon-picker type="text" id="icon">
-                            </ha-icon-picker>
+                            <label for="am-form-icon">Icon</label>
+                            <ha-icon-picker
+                                id="am-form-icon"
+                                .hass=${this._hass}
+                                .value=${f.icon}
+                                @value-changed=${(ev) => (f.icon = ev.detail.value || "")}
+                            ></ha-icon-picker>
                         </div>
 
                         <div class="form-item">
-                            <label for="last-completed">Last Completed</label>
-                            <input type="datetime-local" id="last-completed" class="native-datetime" .value=${val} />
+                            <label for="am-form-last">${f.mode === "edit" ? "Last done (fix the date)" : "Last done"}</label>
+                            <input
+                                type="datetime-local"
+                                id="am-form-last"
+                                class="native-datetime"
+                                .value=${f.lastCompleted}
+                                @input=${(ev) => (f.lastCompleted = ev.target.value)}
+                            />
                         </div>
+
+                        ${this._features ? this._renderSharingFields(f) : ""}
+                        ${this._features && f.mode === "edit" ? this._renderHistory() : ""}
                     </div>
-                    </ha-form>
-                </form>
-                <div slot="footer" class="dialog-actions">
-                    <ha-button appearance="filled" variant="neutral" @click=${() => this._closeDialog('.manage-form')}>
-                        Cancel
-                    </ha-button>
-                    <ha-button appearance="filled" variant="brand" @click=${this._addActivity} class="add-button">
-                        Add
-                    </ha-button>
-                </div>
+                    <div class="dialog-actions form-dialog-actions">
+                        ${f.mode === "edit" ? html`
+                            <ha-button appearance="plain" variant="danger" @click=${this._deleteFromForm}>
+                                Delete
+                            </ha-button>
+                        ` : ""}
+                        <span class="actions-spacer"></span>
+                        <ha-button appearance="filled" variant="neutral" @click=${() => this._closeDialog('.manage-form')}>
+                            Cancel
+                        </ha-button>
+                        <ha-button appearance="filled" variant="brand" ?disabled=${f.saving} @click=${this._saveForm} class="add-button">
+                            ${f.mode === "edit" ? "Save" : "Add"}
+                        </ha-button>
+                    </div>
+                ` : ""}
             </ha-dialog>
         `;
     }
 
+    // Each name is its own field, so renaming is just typing. Several names
+    // are used one after another, one per completion.
+    _renderNamesField(f) {
+        const next = f.mode === "edit" && f.names.length > 1 ? f.names.indexOf(f.nextName) : -1;
+        return html`
+            <div class="form-field">
+                <div class="field-label">
+                    ${f.names.length > 1 ? "Names (used in order, one per completion)" : "Name"}
+                </div>
+                ${f.names.map((name, index) => html`
+                    <div class="name-row">
+                        <ha-textfield
+                            .value=${name}
+                            placeholder=${index === 0 ? "Task name" : "Another name"}
+                            @input=${(ev) => (f.names[index] = ev.target.value)}
+                        ></ha-textfield>
+                        ${index === next ? html`<span class="name-next">next</span>` : ""}
+                        <ha-icon-button
+                            class="remove-name-button"
+                            .path=${CLOSE_PATH}
+                            ?disabled=${f.names.length <= 1}
+                            @click=${() => this._formRemoveName(index)}
+                        ></ha-icon-button>
+                    </div>
+                `)}
+                <div>
+                    <ha-button appearance="plain" variant="brand" @click=${this._formAddName}>
+                        + Add another name
+                    </ha-button>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderSharingFields(f) {
+        const persons = this._persons();
+        if (persons.length === 0) return "";
+        const several = f.assignees.length > 1;
+        const nextPerson = f.rotation === "fixed" ? f.turnOrder[0] : f.turnOrder[f.turnIndex];
+        const chip = (selected, label, onClick) => html`
+            <button type="button" class="am-chip ${selected ? "selected" : ""}" @click=${onClick}>${label}</button>
+        `;
+
+        return html`
+            <div class="sharing-section">
+                <div class="form-field">
+                    <div class="field-label">Who does it</div>
+                    <div class="chip-row">
+                        ${persons.map((p) =>
+                            chip(f.assignees.includes(p.id), p.name, () => this._formToggleAssignee(p.id))
+                        )}
+                    </div>
+                    ${f.assignees.length === 0
+                        ? html`<div class="field-hint">Nobody picked: it shows on the cards for its category.</div>`
+                        : ""}
+                </div>
+
+                ${several ? html`
+                    <div class="form-field">
+                        <div class="field-label">How</div>
+                        <div class="chip-row">
+                            ${ROTATION_OPTIONS.map(([value, label]) =>
+                                chip(f.rotation === value, label, () => this._formSet({ rotation: value }))
+                            )}
+                        </div>
+                    </div>
+                ` : ""}
+
+                ${several && f.rotation !== "anyone" ? html`
+                    <div class="form-field">
+                        <div class="field-label">${f.rotation === "fixed" ? "Always done by" : "Next up"}</div>
+                        <div class="chip-row">
+                            ${[...new Set(f.turnOrder)].map((id) =>
+                                chip(nextPerson === id, this._personName(id), () => this._formSetNext(id))
+                            )}
+                        </div>
+                    </div>
+
+                    <div class="form-field">
+                        <div class="field-label">If not done, give it to everyone after</div>
+                        <div class="escalate-row">
+                            ${f.escUnit !== "never" ? html`
+                                <ha-textfield
+                                    type="number"
+                                    inputmode="decimal"
+                                    no-spinner
+                                    .value=${String(f.escValue)}
+                                    @input=${(ev) => (f.escValue = ev.target.value)}
+                                ></ha-textfield>
+                            ` : ""}
+                            <div class="chip-row">
+                                ${[["hours", "hours"], ["days", "days"], ["never", "Never"]].map(([unit, label]) =>
+                                    chip(f.escUnit === unit, label, () => this._formSet({ escUnit: unit }))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ` : ""}
+
+                ${several && f.rotation === "alternate" ? this._renderTurnPattern(f) : ""}
+            </div>
+        `;
+    }
+
+    // Advanced: the order turns go in, repeats allowed (Alex, Alex, Sam)
+    _renderTurnPattern(f) {
+        return html`
+            <div class="form-field">
+                <button type="button" class="advanced-toggle" @click=${() => this._formSet({ advanced: !f.advanced })}>
+                    <ha-icon icon=${f.advanced ? "mdi:chevron-down" : "mdi:chevron-right"}></ha-icon>
+                    Advanced: turn pattern
+                </button>
+                ${f.advanced ? html`
+                    <div class="field-hint">Turns go in this order, then start over. Tap one to make it next.</div>
+                    <div class="pattern-list">
+                        ${f.turnOrder.map((id, index) => html`
+                            <div class="pattern-item ${index === f.turnIndex ? "next" : ""}">
+                                <button type="button" class="pattern-name" @click=${() => this._formSet({ turnIndex: index })}>
+                                    ${index + 1}. ${this._personName(id)}${index === f.turnIndex ? " (next)" : ""}
+                                </button>
+                                <ha-icon-button
+                                    class="remove-name-button"
+                                    .path=${CLOSE_PATH}
+                                    ?disabled=${f.turnOrder.length <= 1}
+                                    @click=${() => this._formRemoveTurn(index)}
+                                ></ha-icon-button>
+                            </div>
+                        `)}
+                    </div>
+                    <div class="chip-row">
+                        ${f.assignees.map((id) => html`
+                            <button type="button" class="am-chip" @click=${() => this._formSet({ turnOrder: [...f.turnOrder, id] })}>
+                                + ${this._personName(id)}
+                            </button>
+                        `)}
+                        <button type="button" class="am-chip" @click=${this._formResetTurns}>Reset</button>
+                    </div>
+                ` : ""}
+            </div>
+        `;
+    }
+
+    _renderHistory() {
+        const f = this._form;
+        const showName = (f.item?.names || []).length > 1;
+        let body;
+        if (this._historyLoading) {
+            body = html`<div class="field-hint">Loading…</div>`;
+        } else if (this._history.length === 0) {
+            body = html`<div class="field-hint">Not done yet.</div>`;
+        } else {
+            body = html`
+                <div class="history-list">
+                    ${this._history.map((entry) => html`
+                        <div class="history-row">
+                            <div class="history-date">${this._formatWhen(entry.at)}</div>
+                            <div class="history-who">
+                                ${this._historyWho(entry)}
+                                ${showName && entry.name ? html`<div class="history-name">${entry.name}</div>` : ""}
+                            </div>
+                        </div>
+                    `)}
+                </div>
+            `;
+        }
+        return html`
+            <div class="history-section">
+                <div class="section-header">History</div>
+                ${body}
+            </div>
+        `;
+    }
+
+    _historyWho(entry) {
+        let who = entry.by
+            ? this._personName(entry.by)
+            : entry.source === "import" ? "Imported" : "Unknown";
+        if (entry.by && entry.turn && entry.by !== entry.turn) {
+            who += ` (for ${this._personName(entry.turn)})`;
+        }
+        if (entry.escalated) who += " · late";
+        return who;
+    }
+
+    _formatWhen(iso) {
+        const date = new Date(iso);
+        if (isNaN(date.getTime())) return iso || "";
+        return date.toLocaleString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+        });
+    }
+
 	_renderUpdateDialog() {
-		const date = new Date();
-		const year = date.getFullYear();
-		const month = (date.getMonth() + 1).toString().padStart(2, "0");
-		const day = date.getDate().toString().padStart(2, "0");
-		const hours = date.getHours().toString().padStart(2, "0");
-		const minutes = date.getMinutes().toString().padStart(2, "0");
-		let val = `${year}-${month}-${day}T${hours}:${minutes}`;
+		const item = this._currentItem;
 
 		return html`
 			<ha-dialog class="confirm-update" .headerTitle=${"Yay, you did it!! 🎉"} @closed=${this._onDialogClosed}>
 				<div class="confirm-grid">
+					${item && this._features ? html`
+						<div class="update-title-row">
+							<div class="update-task-name">${item.name}</div>
+							<ha-button appearance="outlined" variant="neutral" @click=${this._editCurrentItem}>
+								Edit
+							</ha-button>
+						</div>
+					` : ''}
 					<div class="completed-date-field">
 						<label for="update-last-completed">Date you completed it:</label>
 						<input
 							type="datetime-local"
 							id="update-last-completed"
-							.value=${val}
+							.value=${this._doneAt}
+							@input=${(ev) => (this._doneAt = ev.target.value)}
 						/>
 					</div>
-					${this._currentItem ? html`
+					${item && this._features ? this._renderDoneBy(item) : ''}
+					${item ? html`
 						<div class="last-completed-info">
-							Last completed: ${new Date(this._currentItem.last_completed).toLocaleString()}
+							Last completed: ${new Date(item.last_completed).toLocaleString()}${item.last_completed_by ? ` by ${this._personName(item.last_completed_by)}` : ''}
 						</div>
 						<div class="last-completed-info">
-							Due date: ${new Date(new Date(this._currentItem.last_completed).valueOf() + this._currentItem.frequency_ms).toLocaleString()}
+							Due date: ${new Date(new Date(item.last_completed).valueOf() + item.frequency_ms).toLocaleString()}
 						</div>
+						${this._turnLabel(item) ? html`
+							<div class="last-completed-info">
+								${(item.assigned_to || []).length > 1 ? "Assigned to: " : ""}${this._turnLabel(item)}${item.escalated ? " (overdue, so it went to everyone)" : ""}
+							</div>
+						` : ''}
 					` : ''}
 					
+					${this._features ? '' : html`
 					<div class="name-list-section">
 						<div class="section-header-row">
 							<div class="section-header">Task Names:</div>
@@ -366,6 +693,7 @@ class ActivityManagerCard extends LitElement {
 							` : ''
 						}
 					</div>
+					`}
 				</div>
 				<div class="dialog-actions update-dialog-actions">
 					<ha-button appearance="filled" variant="neutral" @click=${() => this._closeDialog('.confirm-update')}>
@@ -381,6 +709,39 @@ class ActivityManagerCard extends LitElement {
 					</ha-button>
 				</div>
 			</ha-dialog>
+		`;
+	}
+
+	// "Done by": the task's people (everyone if nobody is assigned), plus
+	// the logged-in user's person so they can record covering for someone
+	_doneByOptions(item) {
+		const ids = item.assignees && item.assignees.length
+			? [...item.assignees]
+			: this._persons().map((p) => p.id);
+		const mine = this._myPerson();
+		if (mine && !ids.includes(mine)) ids.push(mine);
+		return ids;
+	}
+
+	_renderDoneBy(item) {
+		const options = this._doneByOptions(item);
+		if (options.length === 0) return '';
+		return html`
+			<div class="form-field">
+				<div class="field-label">Done by</div>
+				<div class="chip-row">
+					${options.map((id) => html`
+						<button
+							type="button"
+							class="am-chip ${this._doneBy === id ? 'selected' : ''}"
+							@click=${() => {
+								this._doneBy = this._doneBy === id ? null : id;
+								this.requestUpdate();
+							}}
+						>${this._personName(id)}</button>
+					`)}
+				</div>
+			</div>
 		`;
 	}
 
@@ -421,7 +782,8 @@ class ActivityManagerCard extends LitElement {
     // can desync after a scrim dismiss and subsequent show() calls no-op.
     _onDialogClosed(ev) {
         const dialog = ev.currentTarget;
-        if (dialog) {
+        // Ignore "closed" bubbling up from a field inside the dialog
+        if (dialog && ev.target === dialog) {
             dialog.open = false;
         }
     }
@@ -490,17 +852,20 @@ class ActivityManagerCard extends LitElement {
 
     // Method to show the Add dialog
     _showAddDialog() {
-        this._showDialog(".manage-form");
+        this._openForm(null);
     }
 
     // Updated method to show update dialog
     _showUpdateDialog(item) {
+        this._doneAt = utils._toLocalInput(new Date());
+        // The logged-in user's person, else whoever's turn it is
+        this._doneBy = this._myPerson() || item.turn || null;
         this._showDialog(".confirm-update", item);
     }
 
     // Updated method to show remove dialog
     _showRemoveDialog(ev, item) {
-        ev.stopPropagation();
+        ev?.stopPropagation();
         this._showDialog(".confirm-remove", item);
     }
 
@@ -618,92 +983,329 @@ _adjustDialogSize(dialogElement) {
         this.requestUpdate();
     }
 
-    _addActivity() {
-        let nameField = this.shadowRoot.querySelector("#name");
-        if (!nameField) {
-            console.error("Name field not found");
-            return;
-        }
-        
-        let category = this.shadowRoot.querySelector("#category");
-        if (!category) {
-            console.error("Category field not found");
-            return;
-        }
-        
-        let icon = this.shadowRoot.querySelector("#icon");
-        let last_completed = this.shadowRoot.querySelector("#last-completed");
+    // --- Add/Edit form ---------------------------------------------------
 
-        // Handle frequency inputs with null checks
-        let frequencyDay = this.shadowRoot.querySelector("#frequency-day");
-        let frequencyHour = this.shadowRoot.querySelector("#frequency-hour");
-        let frequencyMinute = this.shadowRoot.querySelector("#frequency-minute");
-        let frequencySecond = this.shadowRoot.querySelector("#frequency-second");
-        
-        let frequency = {};
-        frequency.days = utils._getNumber(
-            frequencyDay ? frequencyDay.value : "0",
-            0
-        );
-        frequency.hours = utils._getNumber(
-            frequencyHour ? frequencyHour.value : "0",
-            0
-        );
-        frequency.minutes = utils._getNumber(
-            frequencyMinute ? frequencyMinute.value : "0",
-            0
-        );
-        frequency.seconds = utils._getNumber(
-            frequencySecond ? frequencySecond.value : "0",
-            0
-        );
-
-        // Parse comma-separated names if there are commas
-        let nameValue = nameField.value;
-        if (nameValue.includes(',')) {
-            nameValue = nameValue.split(',').map(n => n.trim()).filter(n => n.length > 0);
+    _openForm(item = null) {
+        if (item) {
+            const freq =
+                item.frequency && typeof item.frequency === "object"
+                    ? item.frequency
+                    : { days: utils._getNumber(item.frequency, 0) };
+            const assignees = [...(item.assignees || [])];
+            this._form = {
+                mode: "edit",
+                item,
+                names: [...(item.names && item.names.length ? item.names : [item.name])],
+                nextName: (item.names || [])[item.current_name_index || 0],
+                category: item.category || "",
+                days: freq.days || 0,
+                hours: freq.hours || 0,
+                minutes: freq.minutes || 0,
+                seconds: freq.seconds || 0,
+                icon: item.icon || "",
+                lastCompleted: utils._toLocalInput(new Date(item.last_completed)),
+                assignees,
+                rotation: item.rotation || "alternate",
+                turnOrder: [...(item.turn_order && item.turn_order.length ? item.turn_order : assignees)],
+                turnIndex: item.turn_index || 0,
+                ...this._escalateFields(item.escalate_after, assignees.length > 1),
+                advanced: false,
+            };
+            this._history = [];
+            if (this._features) this._loadHistory(item.id);
+        } else {
+            // A card for one person adds tasks for that person
+            const assignees = this._config.person ? [this._config.person] : [];
+            this._form = {
+                mode: "add",
+                item: null,
+                names: [""],
+                nextName: null,
+                category: this._config["category"] || "",
+                days: 0,
+                hours: 0,
+                minutes: 0,
+                seconds: 0,
+                icon: "",
+                lastCompleted: utils._toLocalInput(new Date()),
+                assignees,
+                rotation: "alternate",
+                turnOrder: [...assignees],
+                turnIndex: 0,
+                escValue: 24,
+                escUnit: "hours",
+                advanced: false,
+            };
         }
+        // Starting values, so Save only sends what changed
+        const { item: _item, ...start } = this._form;
+        this._form.original = JSON.parse(JSON.stringify(start));
+        this._showDialog(".manage-form");
+    }
 
-        // Service call with proper error handling
-        try {
-            this._hass.callService("activity_manager", "add_activity", {
-                name: nameValue,
-                category: category.value,
-                frequency: frequency,
-                icon: icon ? icon.value : undefined,
-                last_completed: last_completed ? last_completed.value : undefined,
+    // escalate_after from the integration -> number + unit for the form.
+    // null means never for a shared task; otherwise default to 24 hours.
+    _escalateFields(value, shared) {
+        if (!value || typeof value !== "object") {
+            return shared ? { escValue: 24, escUnit: "never" } : { escValue: 24, escUnit: "hours" };
+        }
+        const ms =
+            (value.days || 0) * 86400000 +
+            (value.hours || 0) * 3600000 +
+            (value.minutes || 0) * 60000 +
+            (value.seconds || 0) * 1000;
+        if (ms > 0 && ms % 86400000 === 0) return { escValue: ms / 86400000, escUnit: "days" };
+        return { escValue: Math.round((ms / 3600000) * 100) / 100, escUnit: "hours" };
+    }
+
+    _formEscalateAfter(f) {
+        if (f.escUnit === "never") return null;
+        const value = parseFloat(f.escValue);
+        if (isNaN(value) || value < 0) return undefined;
+        return { [f.escUnit]: value };
+    }
+
+    _formSet(values) {
+        Object.assign(this._form, values);
+        this.requestUpdate();
+    }
+
+    _formAddName() {
+        this._form.names.push("");
+        this.requestUpdate();
+    }
+
+    _formRemoveName(index) {
+        const f = this._form;
+        if (f.names.length <= 1) return;
+        f.names.splice(index, 1);
+        this.requestUpdate();
+    }
+
+    // Where `person` is in the pattern, keeping `prefer` if it still points
+    // at them (the pattern can repeat people). Same rule as the integration.
+    _turnIndexFor(order, person, prefer) {
+        if (order[prefer] === person) return prefer;
+        return Math.max(0, order.indexOf(person));
+    }
+
+    // Keep whoever is next up when people are added or removed
+    _formToggleAssignee(id) {
+        const f = this._form;
+        const next = f.turnOrder[f.rotation === "fixed" ? 0 : f.turnIndex];
+        if (f.assignees.includes(id)) {
+            f.assignees = f.assignees.filter((p) => p !== id);
+            f.turnOrder = f.turnOrder.filter((p) => p !== id);
+        } else {
+            f.assignees = [...f.assignees, id];
+            f.turnOrder = [...f.turnOrder, id];
+        }
+        if (f.turnOrder.length === 0) f.turnOrder = [...f.assignees];
+        f.turnIndex = this._turnIndexFor(f.turnOrder, next, f.turnIndex);
+        this.requestUpdate();
+    }
+
+    _formSetNext(id) {
+        const f = this._form;
+        if (f.rotation === "fixed") {
+            // "Always the same person" is the first one in the pattern
+            const order = [...f.turnOrder];
+            order.splice(order.indexOf(id), 1);
+            f.turnOrder = [id, ...order];
+            f.turnIndex = 0;
+        } else {
+            f.turnIndex = this._turnIndexFor(f.turnOrder, id, f.turnIndex);
+        }
+        this.requestUpdate();
+    }
+
+    _formRemoveTurn(index) {
+        const f = this._form;
+        if (f.turnOrder.length <= 1) return;
+        f.turnOrder = f.turnOrder.filter((_, i) => i !== index);
+        if (index < f.turnIndex) f.turnIndex--;
+        f.turnIndex = f.turnIndex % f.turnOrder.length;
+        this.requestUpdate();
+    }
+
+    _formResetTurns() {
+        const f = this._form;
+        const next = f.turnOrder[f.turnIndex];
+        f.turnOrder = [...f.assignees];
+        f.turnIndex = this._turnIndexFor(f.turnOrder, next, f.turnIndex);
+        this.requestUpdate();
+    }
+
+    _loadHistory(itemId) {
+        this._historyLoading = true;
+        this.requestUpdate();
+        this._hass
+            .callWS({ type: "activity_manager/history", item_id: itemId, limit: 200 })
+            .then((rows) => {
+                if (this._form?.item?.id === itemId) this._history = rows || [];
+            })
+            .catch((error) => {
+                console.error("Error loading history:", error);
+                this._history = [];
+            })
+            .finally(() => {
+                this._historyLoading = false;
+                this.requestUpdate();
             });
-            
-            // Clear fields
-            nameField.value = "";
-            if (icon) icon.value = "";
+    }
 
-            // Close dialog
-            this._closeDialog('.manage-form');
-        } catch (error) {
-            console.error("Error adding activity:", error);
+    _editCurrentItem() {
+        const item = this._currentItem;
+        if (!item) return;
+        this._closeDialog('.confirm-update');
+        this._openForm(item);
+    }
+
+    _deleteFromForm() {
+        const item = this._form?.item;
+        if (!item) return;
+        this._closeDialog('.manage-form');
+        this._showRemoveDialog(null, item);
+    }
+
+    async _saveForm() {
+        const f = this._form;
+        if (!f || f.saving) return;
+
+        const names = f.names.map((n) => n.trim()).filter((n) => n.length > 0);
+        if (names.length === 0) return this._showToast("Give the task a name.");
+        const category = f.category.trim();
+        if (!category) return this._showToast("Give the task a category.");
+        const frequency = {
+            days: Math.max(0, utils._getNumber(f.days, 0)),
+            hours: Math.max(0, utils._getNumber(f.hours, 0)),
+            minutes: Math.max(0, utils._getNumber(f.minutes, 0)),
+            seconds: Math.max(0, utils._getNumber(f.seconds, 0)),
+        };
+        if (frequency.days + frequency.hours + frequency.minutes + frequency.seconds === 0)
+            return this._showToast("Set how often it repeats.");
+        const escalate = f.assignees.length ? this._formEscalateAfter(f) : null;
+        if (escalate === undefined) return this._showToast("Check the 'give it to everyone' time.");
+
+        let request;
+        if (f.mode === "add" && !this._features) {
+            // Older integration: the add_activity service, as before
+            request = this._hass.callService("activity_manager", "add_activity", {
+                name: names.length > 1 ? names : names[0],
+                category,
+                frequency,
+                icon: f.icon || undefined,
+                last_completed: f.lastCompleted || undefined,
+            });
+        } else if (f.mode === "add") {
+            const payload = {
+                type: "activity_manager/add",
+                names,
+                category,
+                frequency,
+                last_completed: utils._localToIso(f.lastCompleted) || undefined,
+            };
+            if (f.icon) payload.icon = f.icon;
+            if (f.assignees.length) {
+                Object.assign(payload, {
+                    assignees: f.assignees,
+                    rotation: f.rotation,
+                    turn_order: f.turnOrder,
+                    turn_index: f.turnIndex,
+                    escalate_after: escalate,
+                });
+            }
+            request = this._hass.callWS(payload);
+        } else {
+            const changes = this._formChanges(f, names, category, frequency, escalate);
+            if (changes === null) return this._showToast("Check the last done date.");
+            if (Object.keys(changes).length === 0) {
+                this._closeDialog('.manage-form');
+                return;
+            }
+            request = this._hass.callWS({
+                type: "activity_manager/edit",
+                item_id: f.item.id,
+                ...changes,
+            });
         }
+
+        f.saving = true;
+        this.requestUpdate();
+        try {
+            await request;
+            this._closeDialog('.manage-form');
+            this._fetchData();
+        } catch (error) {
+            console.error("Error saving activity:", error);
+            this._showToast(`Couldn't save: ${error?.message || error}`);
+        } finally {
+            f.saving = false;
+            this.requestUpdate();
+        }
+    }
+
+    // Only the fields that changed, so an edit can't undo a completion
+    // someone made while the form was open. null = bad date.
+    _formChanges(f, names, category, frequency, escalate) {
+        const o = f.original;
+        const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+        const changes = {};
+
+        if (!same(names, o.names)) changes.names = names;
+        if (category !== o.category) changes.category = category;
+        if (
+            frequency.days !== utils._getNumber(o.days, 0) ||
+            frequency.hours !== utils._getNumber(o.hours, 0) ||
+            frequency.minutes !== utils._getNumber(o.minutes, 0)
+        )
+            changes.frequency = frequency;
+        if (f.icon && f.icon !== o.icon) changes.icon = f.icon;
+        if (f.lastCompleted !== o.lastCompleted) {
+            // A correction, not a completion
+            const iso = utils._localToIso(f.lastCompleted);
+            if (!iso) return null;
+            changes.last_completed = iso;
+        }
+
+        const assigneesChanged = !same(f.assignees, o.assignees);
+        if (assigneesChanged) changes.assignees = f.assignees;
+        if (f.assignees.length) {
+            if (assigneesChanged || f.rotation !== o.rotation) changes.rotation = f.rotation;
+            if (assigneesChanged || !same(f.turnOrder, o.turnOrder) || f.turnIndex !== o.turnIndex) {
+                changes.turn_order = f.turnOrder;
+                changes.turn_index = f.turnIndex;
+            }
+            if (assigneesChanged || f.escUnit !== o.escUnit || String(f.escValue) !== String(o.escValue))
+                changes.escalate_after = escalate;
+        }
+        return changes;
     }
 
 	_updateActivity() {
 		if (this._currentItem == null) return;
 
-		const last_completed = this.shadowRoot.querySelector("#update-last-completed");
 		const itemId = this._currentItem["id"];
+		const doneAt = this._doneAt;
 
 		// Use the websocket API directly with the activity UUID — this avoids
 		// the entity_id -> registry lookup in the service handler, which can
 		// silently no-op if the registry lookup misses.
-		this._hass.callWS({
+		const payload = {
 			type: "activity_manager/update",
 			item_id: itemId,
-			last_completed: last_completed.value,
-		}).then(() => {
+		};
+		const iso = utils._localToIso(doneAt);
+		if (iso) payload.last_completed = iso;
+		// An older integration rejects fields it doesn't know
+		if (this._features && this._doneBy) payload.completed_by = this._doneBy;
+
+		this._hass.callWS(payload).then(() => {
 			// Close dialog
 			this._closeDialog('.confirm-update');
 
 			// Update locally for immediate feedback
-			const parsed = new Date(last_completed.value);
+			const parsed = new Date(doneAt);
 			this._currentItem.last_completed = isNaN(parsed.getTime())
 				? new Date().toISOString()
 				: parsed.toISOString();
@@ -867,6 +1469,7 @@ async _getEntityIdForActivity(activity) {
     }
 
 	_fetchData = async () => {
+		this._probeFeatures();
 		try {
 			const items =
 				(await this._hass?.callWS({
@@ -894,14 +1497,7 @@ async _getEntityIdForActivity(activity) {
 						time_unit: "day",
 					};
 				})
-				.filter((item) => {
-					if ("category" in this._config)
-						return (
-							item["category"] == this._config["category"] ||
-							item["category"] == "Activities"
-						);
-					return true;
-				})
+				.filter((item) => this._isVisible(item))
 				.filter((item) => {
 					if (this._config.showDueOnly) return item["difference"] < 0;
 					return true;
@@ -1422,6 +2018,205 @@ async _getEntityIdForActivity(activity) {
 			word-break: break-word;
 			overflow-wrap: break-word;
 		}
+
+		/* Shared tasks: whose turn, and escalated (gone to everyone) */
+		.am-turn {
+			white-space: nowrap;
+		}
+
+		.am-escalated {
+			box-shadow: inset 4px 0 0 var(--am-item-escalated-color, var(--warning-color, #ff9800));
+		}
+
+		.am-escalated .am-turn {
+			font-weight: bold;
+			color: var(--am-item-escalated-color, var(--warning-color, #ff9800));
+		}
+
+		/* Add/Edit form */
+		.form-grid {
+			gap: 16px;
+			padding-top: 4px;
+		}
+
+		.form-field {
+			display: grid;
+			gap: 8px;
+		}
+
+		.field-label {
+			font-size: 14px;
+			color: var(--secondary-text-color);
+		}
+
+		.field-hint {
+			font-size: 12px;
+			color: var(--secondary-text-color);
+		}
+
+		.name-row {
+			display: flex;
+			align-items: center;
+			gap: 4px;
+		}
+
+		.name-row ha-textfield {
+			flex: 1 1 auto;
+			min-width: 0;
+		}
+
+		.name-next {
+			font-size: 12px;
+			color: var(--primary-color);
+		}
+
+		/* Big tap targets for picking people and options */
+		.chip-row {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+		}
+
+		.am-chip {
+			min-height: 40px;
+			padding: 8px 14px;
+			border-radius: 20px;
+			border: 1px solid var(--divider-color, rgba(127, 127, 127, 0.4));
+			background: transparent;
+			color: var(--primary-text-color);
+			font: inherit;
+			font-size: 14px;
+			cursor: pointer;
+		}
+
+		.am-chip.selected {
+			background: var(--primary-color);
+			border-color: var(--primary-color);
+			color: var(--text-primary-color, #ffffff);
+		}
+
+		.sharing-section,
+		.history-section {
+			display: grid;
+			gap: 16px;
+			border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+			padding-top: 16px;
+		}
+
+		.history-section {
+			gap: 4px;
+		}
+
+		.escalate-row {
+			display: flex;
+			align-items: center;
+			flex-wrap: wrap;
+			gap: 8px;
+		}
+
+		.escalate-row ha-textfield {
+			width: 90px !important;
+			flex: 0 0 90px;
+		}
+
+		.advanced-toggle {
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			min-height: 40px;
+			padding: 0;
+			background: none;
+			border: none;
+			color: var(--primary-color);
+			font: inherit;
+			font-size: 14px;
+			cursor: pointer;
+		}
+
+		.pattern-list {
+			display: grid;
+			gap: 4px;
+		}
+
+		.pattern-item {
+			display: flex;
+			align-items: center;
+			border-radius: 8px;
+		}
+
+		.pattern-item.next {
+			background: var(--secondary-background-color);
+		}
+
+		.pattern-name {
+			flex: 1 1 auto;
+			min-height: 40px;
+			text-align: left;
+			background: none;
+			border: none;
+			color: var(--primary-text-color);
+			font: inherit;
+			font-size: 14px;
+			cursor: pointer;
+		}
+
+		.history-list {
+			max-height: 200px;
+			overflow-y: auto;
+		}
+
+		.history-row {
+			display: flex;
+			justify-content: space-between;
+			gap: 12px;
+			padding: 8px 0;
+			border-bottom: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+			font-size: 14px;
+		}
+
+		.history-date {
+			color: var(--secondary-text-color);
+			white-space: nowrap;
+		}
+
+		.history-who {
+			text-align: right;
+		}
+
+		.history-name {
+			font-size: 12px;
+			color: var(--secondary-text-color);
+		}
+
+		.form-dialog-actions {
+			align-items: center;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin-top: 16px;
+			padding-top: 16px;
+			border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
+		}
+
+		.form-dialog-actions .actions-spacer {
+			flex: 1 1 auto;
+		}
+
+		.form-dialog-actions ha-button {
+			--ha-button-height: 48px;
+		}
+
+		/* Completion dialog: task name with the Edit button */
+		.update-title-row {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+		}
+
+		.update-task-name {
+			font-size: 16px;
+			font-weight: bold;
+		}
 	`;
 }
 
@@ -1481,6 +2276,9 @@ class ActivityManagerCardEditor extends LitElement {
         _config.soonHours = ev.detail.value.soonHours;
         _config.showDueOnly = ev.detail.value.showDueOnly;
         _config.icon = ev.detail.value.icon;
+        // Shared tasks assigned to this person show on the card
+        _config.person = ev.detail.value.person;
+        if (!_config.person) delete _config.person;
         this._config = _config;
 
         const event = new CustomEvent("config-changed", {
@@ -1509,6 +2307,10 @@ class ActivityManagerCardEditor extends LitElement {
                             },
                         },
                     },
+                    {
+                        name: "person",
+                        selector: { entity: { filter: { domain: "person" } } },
+                    },
                     { name: "icon", selector: { icon: {} } },
                     { name: "showDueOnly", selector: { boolean: {} } },
                     {
@@ -1525,6 +2327,7 @@ class ActivityManagerCardEditor extends LitElement {
     _computeLabel(schema) {
         var labelMap = {
             category: "Category",
+            person: "Person (shared tasks assigned to them show here)",
             icon: "Icon",
             showDueOnly: "Only show activities that are due",
             soonHours: "Soon to be due (styles the activity)",

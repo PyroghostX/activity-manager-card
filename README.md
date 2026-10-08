@@ -27,6 +27,7 @@ A Lovelace card designed as a companion to the [Activity Manager](https://github
 | ----------- | -------- | -------------------------------------------------------------------------- |
 | header      | no       | Title of the card                                                          |
 | category    | no       | Filter activities to a specific category                                   |
+| person      | no       | A `person.*` entity. Shared tasks show when assigned to this person, whatever their category. Tasks nobody shares still follow `category`. |
 | mode        | no       | Set to "manage" if you want the manager interface. Defaults to basic mode. |
 | icon        | no       | Icon to show on card                                                       |
 | showDueOnly | no       | Set to `true` and only activities that are due is shown                    |
@@ -54,6 +55,19 @@ category: Home
   <img width="300" src="images/basic.png">
 </p>
 
+### Editing, history and shared tasks
+
+Tap a task, then **Edit** to change its names, category, frequency, icon and last done date (a correction, not a completion), see its history, or delete it. A task can be shared: pick who does it, whether they take turns, always the same person, or anyone, who is next up, and how long after the due time it goes to everyone if nobody did it. **Advanced** sets a turn pattern with repeats, like Alex, Alex, Sam. When you complete a task, pick who did it; doing someone else's turn leaves the turn with them for next time.
+
+These need Activity Manager with the `activity_manager/edit` and `activity_manager/history` commands. With an older integration the card works as before.
+
+```
+type: custom:activity-manager-card
+header: Sam
+category: Sam
+person: person.sam
+```
+
 ## Customization
 
 If you want to customize the card style, you can use [Lovlace Card Mod](https://github.com/thomasloven/lovelace-card-mod). Here are some classes:
@@ -65,6 +79,8 @@ If you want to customize the card style, you can use [Lovlace Card Mod](https://
 | .am-due-date  | Style the due date column                                |
 | .am-due       | Style the date if it's due. By default, the text is red. |
 | .am-action    | Style the action column                                  |
+| .am-escalated | A shared task that went to everyone (`--am-item-escalated-color`) |
+| .am-turn      | Whose turn it is                                         |
 
 ## More information
 
