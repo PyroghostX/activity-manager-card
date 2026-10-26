@@ -59,6 +59,13 @@ const ROTATION_OPTIONS = [
     ["anyone", "Anyone"],
 ];
 
+// Phone alert when the task is due (integration's notify field)
+const NOTIFY_OPTIONS = [
+    ["off", "Off"],
+    ["swipe", "Can swipe away"],
+    ["persistent", "Stays until done"],
+];
+
 class ActivityManagerCard extends LitElement {
     _currentItem = null;
     _activities = [];
@@ -553,6 +560,18 @@ class ActivityManagerCard extends LitElement {
                 ` : ""}
 
                 ${several && f.rotation === "alternate" ? this._renderTurnPattern(f) : ""}
+
+                ${this._features ? html`
+                    <div class="form-field">
+                        <div class="field-label">Phone alert when due</div>
+                        <div class="chip-row">
+                            ${NOTIFY_OPTIONS.map(([value, label]) =>
+                                chip(f.notify === value, label, () => this._formSet({ notify: value }))
+                            )}
+                        </div>
+                        ${f.notify !== "off" ? html`<div class="field-hint">Goes to ${f.assignees.length ? "whoever's turn it is (everyone once it's overdue)" : "everyone"}, 8 AM to 10 PM while home. Has Completed and Snooze 4 hours buttons.</div>` : ""}
+                    </div>
+                ` : ""}
             </div>
         `;
     }
@@ -1043,6 +1062,7 @@ _adjustDialogSize(dialogElement) {
                 turnOrder: [...(item.turn_order && item.turn_order.length ? item.turn_order : assignees)],
                 turnIndex: item.turn_index || 0,
                 ...this._escalateFields(item.escalate_after, assignees.length > 1),
+                notify: item.notify || "off",
                 advanced: false,
             };
             this._history = [];
@@ -1068,6 +1088,7 @@ _adjustDialogSize(dialogElement) {
                 turnIndex: 0,
                 escValue: 24,
                 escUnit: "hours",
+                notify: "off",
                 advanced: false,
             };
         }
@@ -1240,6 +1261,7 @@ _adjustDialogSize(dialogElement) {
                 last_completed: utils._localToIso(f.lastCompleted) || undefined,
             };
             if (f.icon) payload.icon = f.icon;
+            if (f.notify && f.notify !== "off") payload.notify = f.notify;
             if (f.assignees.length) {
                 Object.assign(payload, {
                     assignees: f.assignees,
@@ -1313,6 +1335,7 @@ _adjustDialogSize(dialogElement) {
             if (assigneesChanged || f.escUnit !== o.escUnit || String(f.escValue) !== String(o.escValue))
                 changes.escalate_after = escalate;
         }
+        if (f.notify !== o.notify) changes.notify = f.notify;
         return changes;
     }
 
