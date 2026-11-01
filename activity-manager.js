@@ -569,6 +569,11 @@ class ActivityManagerCard extends LitElement {
                                 chip(f.notify === value, label, () => this._formSet({ notify: value }))
                             )}
                         </div>
+                        ${f.notify !== "off" ? html`
+                            <input class="am-input" type="text" placeholder="Note (replaces &quot;Your turn.&quot;)"
+                                .value=${f.note}
+                                @input=${(e) => this._formSet({ note: e.target.value })}>
+                        ` : ""}
                         ${f.notify !== "off" ? html`<div class="field-hint">Goes to ${f.assignees.length ? "whoever's turn it is (everyone once it's overdue)" : "everyone"}, 8 AM to 10 PM while home. Has Completed and Snooze 4 hours buttons.</div>` : ""}
                     </div>
                 ` : ""}
@@ -1063,6 +1068,7 @@ _adjustDialogSize(dialogElement) {
                 turnIndex: item.turn_index || 0,
                 ...this._escalateFields(item.escalate_after, assignees.length > 1),
                 notify: item.notify || "off",
+                note: item.note || "",
                 advanced: false,
             };
             this._history = [];
@@ -1089,6 +1095,7 @@ _adjustDialogSize(dialogElement) {
                 escValue: 24,
                 escUnit: "hours",
                 notify: "off",
+                note: "",
                 advanced: false,
             };
         }
@@ -1262,6 +1269,7 @@ _adjustDialogSize(dialogElement) {
             };
             if (f.icon) payload.icon = f.icon;
             if (f.notify && f.notify !== "off") payload.notify = f.notify;
+            if (f.note.trim()) payload.note = f.note.trim();
             if (f.assignees.length) {
                 Object.assign(payload, {
                     assignees: f.assignees,
@@ -1336,6 +1344,7 @@ _adjustDialogSize(dialogElement) {
                 changes.escalate_after = escalate;
         }
         if (f.notify !== o.notify) changes.notify = f.notify;
+        if (f.note !== o.note) changes.note = f.note.trim();
         return changes;
     }
 
